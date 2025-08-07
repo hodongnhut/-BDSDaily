@@ -100,9 +100,6 @@ const ListingCard = memo(({ listing, onPress, onToggleFavorite, isFavorite }) =>
                         <Text style={styles.listingBedBath}> | {listing.baths || '--'} WC</Text>
                     </View>
                     {renderPricePerSqm()}
-                    <Text style={styles.listingLocation}>
-                        {listing.houseNumber ? `${listing.houseNumber}, ` : ''}{listing.ward ? `${listing.ward}, ` : ''}{listing.location || 'N/A'}
-                    </Text>
                 </View>
             </View>
         </TouchableOpacity>
