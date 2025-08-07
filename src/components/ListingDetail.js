@@ -11,7 +11,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ListingDetail = ({ route, navigation }) => {
     const { listing, isFavorite: initialIsFavorite } = route.params;
-    console.log(listing);
     const { showNotification } = useContext(NotificationContext);
     const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
     const [contactsModalVisible, setContactsModalVisible] = useState(false);
@@ -276,7 +275,7 @@ const ListingDetail = ({ route, navigation }) => {
                             {/* Update Button */}
                             <TouchableOpacity
                                 style={styles.updateButton}
-                                onPress={() => navigation.navigate('ListingFormAdvanced')}
+                                onPress={() => navigation.navigate('ListingFormAdvanced', { propertyId: listing.id })}
                             >
                                 <Text style={styles.updateButtonText}>Cập nhật</Text>
                             </TouchableOpacity>
@@ -313,7 +312,6 @@ const ListingDetail = ({ route, navigation }) => {
                     <ImageViewer style={styles.modalImage}
                         imageUrls={images.map(url => {
                             const finalUrl = url.startsWith('http') ? url : require('../assets/logo.webp');
-                            console.log('ImageViewer - loading URL:', finalUrl);
                             return { url: finalUrl };
                         })}
                         index={currentIndex}

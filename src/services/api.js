@@ -176,7 +176,6 @@ export const updateProfile = async (profileData, accessToken) => {
 
 export const fetchWards = async (district) => {
     try {
-        console.log(district)
         const accessToken = await AsyncStorage.getItem('accessToken');
         const url = `https://app.bdsdaily.com/api/property/address?address=${encodeURIComponent(district)}`;
         const response = await fetch(url, {
@@ -224,3 +223,58 @@ export const createProperty = async (propertyData) => {
         throw new Error(errorMessage);
     }
 };
+
+export const getProperty = async (propertyId) => {
+    try {
+        const url = `https://app.bdsdaily.com/api/property/view?propertyId=${propertyId}`;
+        const accessToken = await AsyncStorage.getItem('accessToken');
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+        const data = await response.json();
+        if (response.ok && data.status) {
+            return {
+                property: data.data.property,
+                advantages: data.data.advantages,
+                disadvantages: data.data.disadvantages,
+                images: data.data.images,
+                contacts: data.data.contacts,
+            };
+        } else {
+            throw new Error(data.msg || 'Lấy Chi Tiết BĐS Thành Công!');
+        }
+    } catch (error) {
+        const errorMessage = error.message || 'Đã xảy ra lỗi khi tạo bất động sản.';
+        throw new Error(errorMessage);
+    }
+};
+
+
+export const updateProperty = async (propertyData) => {
+    try {
+        const accessToken = await AsyncStorage.getItem('accessToken');
+        const response = await fetch('https://app.bdsdaily.com/api/property/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(propertyData),
+        });
+        const data = await response.json();
+        if (response.ok && data.status) {
+            return data.data;
+        } else {
+            throw new Error(data.msg || 'Cập nhật bất động sản thất bại!');
+        }
+    } catch (error) {
+        const errorMessage = error.message || 'Đã xảy ra lỗi khi tạo bất động sản.';
+        throw new Error(errorMessage);
+    }
+};
+
+

@@ -11,60 +11,9 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../styles/colors'; // Ensure this is correctly imported
+import { colors } from '../styles/colors';
 import { fetchWards, createProperty } from '../services/api';
-
-// Property types and district options
-const propertyTypes = [
-    { label: 'Chưa chọn', value: '30' },
-    { label: 'Biệt thự', value: '13' },
-    { label: 'Căn hộ', value: '17' },
-    { label: 'Căn Hộ Dịch Vụ', value: '12' },
-    { label: 'Cao ốc', value: '16' },
-    { label: 'Condotel', value: '19' },
-    { label: 'Đất', value: '24' },
-    { label: 'Góc 2 mặt tiền', value: '28' },
-    { label: 'Karaoke', value: '25' },
-    { label: 'Khác', value: '27' },
-    { label: 'Khách Sạn', value: '15' },
-    { label: 'Kho xưởng', value: '23' },
-    { label: 'Mặt Bằng', value: '22' },
-    { label: 'Nhà Cấp 4', value: '9' },
-    { label: 'Nhà Hẻm, Ngõ', value: '10' },
-    { label: 'Nhà Nát', value: '11' },
-    { label: 'Nhà phố', value: '8' },
-    { label: 'Nhà Phố & Biệt thự', value: '14' },
-    { label: 'Phòng Trọ', value: '26' },
-    { label: 'ShopHouse', value: '18' },
-    { label: 'Tòa Nhà Văn Phòng', value: '21' },
-    { label: 'Văn Phòng', value: '20' },
-];
-
-const districtOptions = [
-    { label: 'Chọn Quận Huyện...', value: null },
-    { label: 'Quận 1', value: 'Quận 1' },
-    { label: 'Quận 12', value: 'Quận 12' },
-    { label: 'Gò Vấp', value: 'Gò Vấp' },
-    { label: 'Bình Thạnh', value: 'Bình Thạnh' },
-    { label: 'Tân Bình', value: 'Tân Bình' },
-    { label: 'Tân Phú', value: 'Tân Phú' },
-    { label: 'Phú Nhuận', value: 'Phú Nhuận' },
-    { label: 'Thủ Đức', value: 'Thủ Đức' },
-    { label: 'Quận 3', value: 'Quận 3' },
-    { label: 'Quận 10', value: 'Quận 10' },
-    { label: 'Quận 11', value: 'Quận 11' },
-    { label: 'Quận 4', value: 'Quận 4' },
-    { label: 'Quận 5', value: 'Quận 5' },
-    { label: 'Quận 6', value: 'Quận 6' },
-    { label: 'Quận 8', value: 'Quận 8' },
-    { label: 'Bình Tân', value: 'Bình Tân' },
-    { label: 'Quận 7', value: 'Quận 7' },
-    { label: 'Huyện Củ Chi', value: 'Huyện Củ Chi' },
-    { label: 'Huyện Hóc Môn', value: 'Huyện Hóc Môn' },
-    { label: 'Huyện Bình Chánh', value: 'Huyện Bình Chánh' },
-    { label: 'Huyện Nhà Bè', value: 'Huyện Nhà Bè' },
-    { label: 'Huyện Cần Giờ', value: 'Huyện Cần Giờ' },
-];
+import { districtOptions, propertyTypes } from '../data/fromPreparing';
 
 const ListingForm = ({ onClose, navigation }) => {
     const [transactionType, setTransactionType] = useState('Bán');
@@ -123,7 +72,6 @@ const ListingForm = ({ onClose, navigation }) => {
         }
     }, [locationCache]);
 
-
     const handleStreetInputChange = useCallback(
         (text) => {
             setStreet(text);
@@ -138,7 +86,6 @@ const ListingForm = ({ onClose, navigation }) => {
         },
         [streets]
     );
-
 
     const handleStreetSelect = useCallback((streetName) => {
         setStreet(streetName);
@@ -175,15 +122,16 @@ const ListingForm = ({ onClose, navigation }) => {
                 region: areaDescription,
             };
             const response = await createProperty(propertyData);
-            navigation.navigate('ListingFormAdvanced', { basicData: propertyData, response });
+            navigation.navigate('ListingFormAdvanced', { propertyId: response.property.property_id });
         } catch (error) {
             Alert.alert('Error', error.message || 'Failed to create property.');
         } finally {
             setIsLoading(false);
         }
     };
-    const memoizedPropertyTypes = useMemo(() => propertyTypes, []);
-    const memoizedDistrictOptions = useMemo(() => districtOptions, []);
+
+    const memoizedPropertyTypes = useMemo(() => propertyTypes || [], [propertyTypes]);
+    const memoizedDistrictOptions = useMemo(() => districtOptions || [], [districtOptions]);
 
     const renderStreetSuggestion = ({ item }) => (
         <TouchableOpacity
@@ -272,9 +220,13 @@ const ListingForm = ({ onClose, navigation }) => {
                                         enabled={!isLoading}
                                     >
                                         <Picker.Item label="Chọn Loại BĐS" value="" />
-                                        {memoizedPropertyTypes.map((item) => (
-                                            <Picker.Item key={item.value} label={item.label} value={item.value} />
-                                        ))}
+                                        {memoizedPropertyTypes.length > 0 ? (
+                                            memoizedPropertyTypes.map((item) => (
+                                                <Picker.Item key={item.value} label={item.label} value={item.value} />
+                                            ))
+                                        ) : (
+                                            <Picker.Item label="No property types available" value="" />
+                                        )}
                                     </Picker>
                                 </View>
                             </View>
@@ -304,14 +256,18 @@ const ListingForm = ({ onClose, navigation }) => {
                                         accessibilityLabel="Select district"
                                         enabled={!isLoading}
                                     >
-                                        {memoizedDistrictOptions.map((item) => (
-                                            <Picker.Item
-                                                key={item.value || 'placeholder'}
-                                                label={item.label}
-                                                value={item.value}
-                                                style={styles.pickerItem}
-                                            />
-                                        ))}
+                                        {memoizedDistrictOptions.length > 0 ? (
+                                            memoizedDistrictOptions.map((item) => (
+                                                <Picker.Item
+                                                    key={item.value || 'placeholder'}
+                                                    label={item.label}
+                                                    value={item.value}
+                                                    style={styles.pickerItem}
+                                                />
+                                            ))
+                                        ) : (
+                                            <Picker.Item label="No districts available" value="" />
+                                        )}
                                     </Picker>
                                 </View>
                             </View>
@@ -359,10 +315,10 @@ const ListingForm = ({ onClose, navigation }) => {
                             />
                             {filteredStreets.length > 0 && street.trim() !== '' && (
                                 <FlatList
-                                    style={styles.suggestionList}
+                                    style={styles.id}
                                     data={filteredStreets}
                                     renderItem={renderStreetSuggestion}
-                                    keyExtractor={(item) => item.value}
+                                    keyExtractor={(item) => item.id}
                                     keyboardShouldPersistTaps="handled"
                                 />
                             )}
@@ -613,7 +569,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     suggestionList: {
-        maxHeight: 17,
+        maxHeight: 172,
         backgroundColor: '#fff',
         borderWidth: 1,
         borderColor: '#E0E0E0',

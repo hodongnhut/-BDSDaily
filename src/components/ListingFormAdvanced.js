@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -8,90 +8,29 @@ import {
     ScrollView,
     Modal,
     SafeAreaView,
+    FlatList,
+    Image,
+    Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../styles/colors';
 import AddContactForm from './AddContactForm';
+import { fetchWards, updateProperty, getProperty } from '../services/api';
+import {
+    transactionTypes,
+    propertyTypes,
+    statusOptions,
+    assetTypeOptions,
+    locationTypeOptions,
+    productTypeOptions,
+    directionOptions,
+    landTypeOptions,
+    priceUnitOptions,
+    districtOptions,
+    prosConsOptions
+} from '../data/fromPreparing';
 
-
-const transactionTypes = ['Bán', 'Cho Thuê'];
-const propertyTypes = [
-    { label: "Biệt thự", value: "13" },
-    { label: "Căn hộ", value: "17" },
-    { label: "Căn Hộ Dịch Vụ", value: "12" },
-    { label: "Cao ốc", value: "16" },
-    { label: "Chưa chọn", value: "30" },
-    { label: "Condotel", value: "19" },
-    { label: "Đất", value: "24" },
-    { label: "Góc 2 mặt tiền", value: "28" },
-    { label: "Karaoke", value: "25" },
-    { label: "Khác", value: "27" },
-    { label: "Khách Sạn", value: "15" },
-    { label: "Kho xưởng", value: "23" },
-    { label: "Mặt Bằng", value: "22" },
-    { label: "Nhà Cấp 4", value: "9" },
-    { label: "Nhà Hẻm, Ngõ", value: "10" },
-    { label: "Nhà Nát", value: "11" },
-    { label: "Nhà phố", value: "8" },
-    { label: "Nhà Phố & Biệt thự", value: "14" },
-    { label: "Phòng Trọ", value: "26" },
-    { label: "ShopHouse", value: "18" },
-    { label: "Tòa Nhà Văn Phòng", value: "21" },
-    { label: "Văn Phòng", value: "20" }
-];
-
-const statusOptions = ['Đang Giao Dịch', 'Ngưng Giao Dịch', 'Đã Giao Dịch', 'Đã Cọc'];
-const prosConsOptions = {
-    pros: [
-        'Nhà Mới Xây',
-        'Giá Rẻ',
-        'Bề Ngang Lớn',
-        'Nhà Kế Bên Có Bán, Có Thể Mua Gộp',
-        'Vị Trí Đẹp Nhất Trên Con Đường',
-        'Căn Góc, có hẻm bên hông',
-        'Căn Góc, 2 Mặt Đường Chính',
-        'Nhà 2 Mặt Đường Trước và Sau',
-        'Có Hẻm Sau Nhà',
-        'Hẻm Thông',
-        'Gần Công Viên Siêu Thị, Trung Tâm Thương Mại',
-        'Tặng Full Nội Thất',
-        'Nội Thất Cao Cấp',
-        'Quy Hoạch Mở Đường',
-        'Gần Siêu Dự Án Đang Xây',
-        'Chủ nhà thiện chí',
-        'Có Hệ thống PCCC',
-        'Khuôn đất Vuông Vức',
-        'Giá /m2 rẻ',
-        'Nhà đẹp có sẵn nội thất',
-        'Gần mặt tiền đường',
-        'Nhà cũ tiện xây mới',
-        'Nhà nhiều phòng',
-        'Nhà cho thuê giá cao'
-    ],
-    cons: [
-        'Chủ nhà không thiện chí',
-        'Có Cây Trước Nhà',
-        'Có Cống Trước Nhà',
-        'Có Trụ Điện Trước Nhà',
-        'Dưới Chân Cầu Hoặc Điện Cao Thế',
-        'Đất Không Được Vuông',
-        'Đất Tóp Hậu',
-        'Đối Diện hoặc Gần Chùa, Nhà Thờ',
-        'Đường Hoặc Hẻm Đâm Vào Nhà',
-        'Gần Nghĩa Trang',
-        'Gần nhà tang lễ',
-        'Gần Trại Hòm',
-        'Hẻm Cụt',
-        'Không Cho Xây Mới Hoặc Không Thể Xây Mới',
-        'Pháp Lý (Thừa Kế, Tranh Chấp, Chưa Hoàn Công...)',
-        'Quy Hoạch Lộ Giới Hết Nhà',
-        'Quy Hoạch Lộ Giới Nhiều',
-        'Quy Hoạch Treo'
-    ],
-};
-
-// Component con để nhóm các input
 const Section = ({ title, children }) => (
     <View style={styles.sectionContainer}>
         <Text style={styles.sectionTitle}>{title}</Text>
@@ -109,37 +48,32 @@ const InputGroup = ({ label, children, isRequired }) => (
     </View>
 );
 
-const ListingFormAdvanced = ({ navigation }) => {
-    // Thêm state để quản lý tab đang được chọn
+const ListingFormAdvanced = ({ route, navigation }) => {
+    const { id } = route.params;
     const [selectedTab, setSelectedTab] = useState('Dữ Liệu Nhà Đất');
     const [isContactModalVisible, setIsContactModalVisible] = useState(false);
+    const [wards, setWards] = useState([]);
+    const [streets, setStreets] = useState([]);
+    const [filteredStreets, setFilteredStreets] = useState([]);
+    const [locationCache, setLocationCache] = useState({});
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSaveContact = (newContact) => {
-        // Xử lý logic lưu contact, có thể thêm vào danh sách contacts trong state
-        console.log('Lưu liên hệ mới:', newContact);
-    };
-
-    // --- STATE MANAGEMENT ---
     const [formData, setFormData] = useState({
-        // ... (Giữ nguyên các state cũ)
-        // Vị trí
         city: 'Hồ Chí Minh',
         district: null,
         ward: null,
-        street: null,
+        street: '',
         houseNumber: '',
         lotNumber: '',
         sheetNumber: '',
         blockNumber: '',
         areaDescription: '',
-        // Thông tin cơ bản
         transactionType: 'Bán',
         propertyType: null,
         listingType: null,
         price: '',
         priceUnit: 'Tỷ',
         priceRate: '',
-        // Diện tích
         landArea: '',
         landWidth: '',
         landLength: '',
@@ -148,7 +82,6 @@ const ListingFormAdvanced = ({ navigation }) => {
         plannedWidth: '',
         plannedLength: '',
         plannedBackWidth: '',
-        // Thông tin khác
         beds: '',
         baths: '',
         productType: null,
@@ -158,19 +91,15 @@ const ListingFormAdvanced = ({ navigation }) => {
         usedArea: '',
         floors: '',
         basements: '',
-        // Trạng thái
         status: null,
-        hasRedBook: false,
+        assetType: null,
         hasTaxContract: false,
         hasLeaseContract: false,
         isUnderNegotiation: false,
-        isMortgaged: false,
-        // Liên hệ
         contactName: '',
         contactPhone: '',
         hasLuckyMoney: false,
         notes: '',
-        // Ưu/Nhược điểm
         selectedPros: new Set(),
         selectedCons: new Set(),
     });
@@ -178,13 +107,73 @@ const ListingFormAdvanced = ({ navigation }) => {
     const [redBookImages, setRedBookImages] = useState([]);
     const [additionalImages, setAdditionalImages] = useState([]);
 
+    useEffect(() => {
+        const property_id = id;
+        console.log(property_id);
+    }, [navigation]);
+
+    const handleDistrictChange = useCallback(async (districtValue) => {
+        setFormData((prev) => ({ ...prev, district: districtValue, ward: null, street: '' }));
+        setFilteredStreets([]);
+        if (!districtValue) {
+            setWards([]);
+            setStreets([]);
+            return;
+        }
+
+        if (locationCache[districtValue]) {
+            setWards(locationCache[districtValue].wards);
+            setStreets(locationCache[districtValue].streets);
+            setFilteredStreets(locationCache[districtValue].streets);
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const { wards, streets } = await fetchWards(districtValue);
+            setWards(wards);
+            setStreets(streets);
+            setFilteredStreets(streets);
+            setLocationCache((prev) => ({
+                ...prev,
+                [districtValue]: { wards, streets },
+            }));
+        } catch (error) {
+            Alert.alert('Error', error.message || 'Failed to fetch wards and streets.');
+            setWards([]);
+            setStreets([]);
+            setFilteredStreets([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [locationCache]);
+
+    const handleStreetInputChange = useCallback(
+        (text) => {
+            setFormData((prev) => ({ ...prev, street: text }));
+            if (text.trim() === '') {
+                setFilteredStreets(streets);
+            } else {
+                const filtered = streets.filter((item) =>
+                    item.Name.toLowerCase().includes(text.toLowerCase())
+                );
+                setFilteredStreets(filtered);
+            }
+        },
+        [streets]
+    );
+
+    const handleStreetSelect = useCallback((streetName) => {
+        setFormData((prev) => ({ ...prev, street: streetName }));
+        setFilteredStreets([]);
+    }, []);
 
     const handleChange = (name, value) => {
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
     const handleToggleProsCons = (type, value) => {
-        setFormData(prev => {
+        setFormData((prev) => {
             const newSet = new Set(prev[type]);
             if (newSet.has(value)) {
                 newSet.delete(value);
@@ -195,246 +184,451 @@ const ListingFormAdvanced = ({ navigation }) => {
         });
     };
 
-    const handleSubmit = () => {
-        console.log('Submitted Data:', formData);
-        // Logic gửi dữ liệu lên API
-        // ...
-        // Sau khi thành công, đóng form
-        navigation.goBack();
+    const handleSubmit = async () => {
+        const missingFields = [];
+        if (!formData.transactionType) missingFields.push('Loại Giao Dịch');
+        if (!formData.propertyType) missingFields.push('Loại BĐS');
+        if (!formData.district) missingFields.push('Quận Huyện');
+        if (!formData.ward) missingFields.push('Phường/Xã');
+        if (!formData.street.trim()) missingFields.push('Đường');
+        if (!formData.houseNumber.trim()) missingFields.push('Số Nhà');
+        if (!formData.status) missingFields.push('Trạng thái giao dịch');
+        if (!formData.assetType) missingFields.push('Loại Hình');
+
+        if (missingFields.length > 0) {
+            Alert.alert('Missing Fields', `Vui lòng điền: ${missingFields.join(', ')}`);
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const propertyData = {
+                listing_types_id: formData.transactionType === 'Bán' ? 1 : 2,
+                property_type_id: parseInt(formData.propertyType, 10),
+                status: parseInt(formData.status, 10),
+                asset_type: parseInt(formData.assetType, 10),
+                provinces: formData.city,
+                districts: formData.district,
+                wards: formData.ward,
+                streets: formData.street,
+                house_number: formData.houseNumber,
+                plot_number: formData.lotNumber,
+                sheet_number: formData.sheetNumber,
+                lot_number: formData.blockNumber,
+                region: formData.areaDescription,
+                price: formData.price,
+                price_unit: formData.priceUnit,
+                price_rate: formData.priceRate,
+                land_area: formData.landArea,
+                land_width: formData.landWidth,
+                land_length: formData.landLength,
+                back_width: formData.backWidth,
+                planned_area: formData.plannedArea,
+                planned_width: formData.plannedWidth,
+                planned_length: formData.plannedLength,
+                planned_back_width: formData.plannedBackWidth,
+                beds: formData.beds,
+                baths: formData.baths,
+                product_type: formData.productType,
+                direction: formData.direction,
+                land_type: formData.landType,
+                street_width: formData.streetWidth,
+                used_area: formData.usedArea,
+                floors: formData.floors,
+                basements: formData.basements,
+                has_tax_contract: formData.hasTaxContract,
+                has_lease_contract: formData.hasLeaseContract,
+                is_under_negotiation: formData.isUnderNegotiation,
+                contact_name: formData.contactName,
+                contact_phone: formData.contactPhone,
+                has_lucky_money: formData.hasLuckyMoney,
+                notes: formData.notes,
+                pros: Array.from(formData.selectedPros),
+                cons: Array.from(formData.selectedCons),
+            };
+            await createProperty(propertyData);
+            Alert.alert('Thành công', 'Đã tạo bất động sản thành công.');
+            navigation.goBack();
+        } catch (error) {
+            Alert.alert('Lỗi', error.message || 'Không thể tạo bất động sản.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleGoBack = () => {
         navigation.goBack();
     };
 
-    // --- HÀM XỬ LÝ HÌNH ẢNH (GIẢ LẬP) ---
-    const handleImagePicker = (imageType) => {
-        // Đây là nơi bạn sẽ tích hợp thư viện chọn ảnh thực tế
-        // Ví dụ với react-native-image-picker:
-        // ImagePicker.launchImageLibrary({}, (response) => {
-        //   if (response.didCancel) return;
-        //   if (response.error) {
-        //     console.log('ImagePicker Error: ', response.error);
-        //   } else {
-        //     const newImage = { uri: response.uri, type: response.type, name: response.fileName };
-        //     if (imageType === 'redBook') {
-        //       setRedBookImages(prev => [...prev, newImage]);
-        //     } else {
-        //       setAdditionalImages(prev => [...prev, newImage]);
-        //     }
-        //   }
-        // });
+    const handleSaveContact = (newContact) => {
+        setFormData((prev) => ({
+            ...prev,
+            contactName: newContact.name || prev.contactName,
+            contactPhone: newContact.phone || prev.contactPhone,
+        }));
+        setIsContactModalVisible(false);
+    };
 
-        // Giả lập việc thêm ảnh
+    const handleImagePicker = (imageType) => {
         const dummyImageUri = 'https://via.placeholder.com/150';
         const newImage = { uri: dummyImageUri, name: `ảnh_${Math.random().toString(36).substring(7)}.jpg` };
         if (imageType === 'redBook') {
-            setRedBookImages(prev => [...prev, newImage]);
+            setRedBookImages((prev) => [...prev, newImage]);
         } else {
-            setAdditionalImages(prev => [...prev, newImage]);
+            setAdditionalImages((prev) => [...prev, newImage]);
         }
     };
 
     const handleRemoveImage = (imageType, indexToRemove) => {
         if (imageType === 'redBook') {
-            setRedBookImages(redBookImages.filter((_, index) => index !== indexToRemove));
+            setRedBookImages((prev) => prev.filter((_, index) => index !== indexToRemove));
         } else {
-            setAdditionalImages(additionalImages.filter((_, index) => index !== indexToRemove));
+            setAdditionalImages((prev) => prev.filter((_, index) => index !== indexToRemove));
         }
     };
+
+    // Render street suggestion item
+    const renderStreetSuggestion = ({ item }) => (
+        <TouchableOpacity
+            style={styles.suggestionItem}
+            onPress={() => handleStreetSelect(item.Name)}
+            accessibilityLabel={`Chọn đường ${item.Name}`}
+        >
+            <Text style={styles.suggestionText}>{item.Name}</Text>
+        </TouchableOpacity>
+    );
 
     // Component hiển thị nội dung của tab "Dữ Liệu Nhà Đất"
     const renderDataForm = () => (
         <>
-            {/* Section 1: Thông tin cơ bản */}
             <Section title="Thông tin cơ bản">
-                {/* ... (Nội dung của Section 1) */}
                 <View style={styles.fieldRow}>
-                    <InputGroup label=" Loại Giao Dịch" isRequired>
+                    <InputGroup label="Vị Trí BĐS" isRequired>
+                        <View style={styles.pickerContainer}>
+                            <Picker
+                                selectedValue={formData.locationType}
+                                onValueChange={(itemValue) => handleChange('locationType', itemValue)}
+                                style={styles.picker}
+                                enabled={!isLoading}
+                            >
+                                {locationTypeOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
+                            </Picker>
+                        </View>
+
+                    </InputGroup>
+
+                </View>
+                <View style={styles.fieldRow}>
+                    <InputGroup label="Giá" isRequired>
+                        <TextInput
+                            style={styles.input}
+                            value={formData.price}
+                            onChangeText={(text) => handleChange('price', text)}
+                            accessibilityLabel="Nhập giá"
+                            editable={!isLoading}
+                        />
+                    </InputGroup>
+                </View>
+                <View style={styles.fieldRow}>
+                    <InputGroup label="Giá chốt">
+                        <TextInput
+                            style={styles.input}
+                            value={formData.final_price}
+                            onChangeText={(text) => handleChange('final_price', text)}
+                            accessibilityLabel="Giá chốt"
+                            editable={!isLoading}
+                        />
+                    </InputGroup>
+                </View>
+                <View style={styles.fieldRow}>
+
+                </View>
+            </Section>
+            <Section title="Thông tin giao dịch">
+                <View style={styles.fieldRow}>
+                    <InputGroup label="Loại Giao Dịch" isRequired>
                         <View style={styles.radioGroup}>
-                            {transactionTypes.map(type => (
+                            {transactionTypes.map((type) => (
                                 <TouchableOpacity
                                     key={type}
                                     style={[styles.radioButton, formData.transactionType === type && styles.radioButtonSelected]}
                                     onPress={() => handleChange('transactionType', type)}
+                                    disabled={isLoading}
                                 >
-                                    <Text style={[styles.radioText, formData.transactionType === type && styles.radioTextSelected]}>{type}</Text>
+                                    <Text style={[styles.radioText, formData.transactionType === type && styles.radioTextSelected]}>
+                                        {type}
+                                    </Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
                     </InputGroup>
-                    <InputGroup label=" Loại BĐS" isRequired>
+                    <InputGroup label="Loại Sản Phẩm" isRequired>
                         <View style={styles.pickerContainer}>
                             <Picker
                                 selectedValue={formData.propertyType}
                                 onValueChange={(itemValue) => handleChange('propertyType', itemValue)}
                                 style={styles.picker}
+                                enabled={!isLoading}
                             >
                                 <Picker.Item label="Chọn Loại BĐS" value={null} />
-                                {propertyTypes.map(type => (
+                                {propertyTypes.map((type) => (
                                     <Picker.Item key={type.value} label={type.label} value={type.value} />
                                 ))}
                             </Picker>
                         </View>
                     </InputGroup>
+
+                </View>
+
+
+                <View style={[styles.fieldRow, { marginTop: 10 }]}>
+                    <InputGroup label="Loại Tài Sản" isRequired>
+                        <View style={styles.pickerContainer}>
+                            <Picker
+                                selectedValue={formData.assetType}
+                                onValueChange={(itemValue) => handleChange('assetType', itemValue)}
+                                style={styles.picker}
+                                enabled={!isLoading}
+                            >
+                                {assetTypeOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
+                            </Picker>
+                        </View>
+                    </InputGroup>
+
                 </View>
 
                 <View style={styles.fullWidthField}>
-                    <Text style={styles.label}>* Trạng thái giao dịch</Text>
-                    <View style={styles.checkboxGroup}>
-                        {statusOptions.map(status => (
-                            <View key={status} style={styles.checkboxItem}>
-                                <TouchableOpacity
-                                    onPress={() => handleChange('status', status)}
-                                >
-                                    <Icon
-                                        name={formData.status === status ? "radiobox-marked" : "radiobox-blank"}
-                                        size={20}
-                                        color={formData.status === status ? colors.secondary : '#888'}
-                                    />
-                                </TouchableOpacity>
-                                <Text style={styles.checkboxText}>{status}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={[styles.fieldRow, { marginTop: 10 }]}>
-                    <InputGroup label="Các Loại Hình">
+                    <InputGroup label="Trạng thái giao dịch" isRequired>
                         <View style={styles.checkboxGroup}>
-                            <View style={styles.checkboxItem}>
-                                <TouchableOpacity onPress={() => handleChange('hasRedBook', !formData.hasRedBook)}>
-                                    <Icon
-                                        name={formData.hasRedBook ? "checkbox-marked" : "checkbox-blank-outline"}
-                                        size={20}
-                                        color={formData.hasRedBook ? colors.secondary : '#888'}
-                                    />
-                                </TouchableOpacity>
-                                <Text style={styles.checkboxText}>Có Sổ</Text>
-                            </View>
-                            <View style={styles.checkboxItem}>
-                                <TouchableOpacity onPress={() => handleChange('isMortgaged', !formData.isMortgaged)}>
-                                    <Icon
-                                        name={formData.isMortgaged ? "checkbox-marked" : "checkbox-blank-outline"}
-                                        size={20}
-                                        color={formData.isMortgaged ? colors.secondary : '#888'}
-                                    />
-                                </TouchableOpacity>
-                                <Text style={styles.checkboxText}>Thế Chấp</Text>
-                            </View>
+                            {statusOptions.map((option) => (
+                                <View key={option.value} style={styles.checkboxItem}>
+                                    <TouchableOpacity
+                                        onPress={() => handleChange('status', option.value)}
+                                        disabled={isLoading}
+                                    >
+                                        <Icon
+                                            name={formData.status === option.value ? 'radiobox-marked' : 'radiobox-blank'}
+                                            size={20}
+                                            color={formData.status === option.value ? colors.secondary : '#888'}
+                                        />
+                                    </TouchableOpacity>
+                                    <Text style={styles.checkboxText}>{option.label}</Text>
+                                </View>
+                            ))}
                         </View>
                     </InputGroup>
                 </View>
             </Section>
 
-            {/* Section 2: Vị trí BĐS */}
-            <Section title="Vị Trí BĐS">
+            <Section title="Địa Chỉ BĐS">
                 <View style={styles.fieldRow}>
-                    <InputGroup label=" Tỉnh Thành" isRequired>
+                    <InputGroup label="Tỉnh Thành" isRequired>
                         <View style={styles.staticInput}>
                             <Text style={styles.staticText}>{formData.city}</Text>
                         </View>
                     </InputGroup>
-                    <InputGroup label=" Quận Huyện" isRequired>
+                    <InputGroup label="Quận Huyện" isRequired>
                         <View style={styles.pickerContainer}>
                             <Picker
                                 selectedValue={formData.district}
-                                onValueChange={(itemValue) => handleChange('district', itemValue)}
+                                onValueChange={handleDistrictChange}
                                 style={styles.picker}
+                                enabled={!isLoading}
                             >
-                                <Picker.Item label="Chọn Quận Huyện" value={null} />
-                                <Picker.Item label="Quận 1" value="q1" />
-                                <Picker.Item label="TP. Thủ Đức" value="thuduc" />
+                                {districtOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
                             </Picker>
                         </View>
                     </InputGroup>
                 </View>
-
                 <View style={styles.fieldRow}>
-                    <InputGroup label=" Phường / Xã" isRequired>
+                    <InputGroup label="Phường / Xã" isRequired>
                         <View style={styles.pickerContainer}>
                             <Picker
                                 selectedValue={formData.ward}
                                 onValueChange={(itemValue) => handleChange('ward', itemValue)}
                                 style={styles.picker}
+                                enabled={wards.length > 0 && !isLoading}
                             >
                                 <Picker.Item label="Chọn Phường / Xã" value={null} />
-                            </Picker>
-                        </View>
-                    </InputGroup>
-                    <InputGroup label=" Đường" isRequired>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={formData.street}
-                                onValueChange={(itemValue) => handleChange('street', itemValue)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Chọn Đường" value={null} />
+                                {wards.map((item) => (
+                                    <Picker.Item key={item.value} label={item.Name} value={item.Name} />
+                                ))}
                             </Picker>
                         </View>
                     </InputGroup>
                 </View>
+                <View style={styles.fieldRow}>
+                    <InputGroup label="Đường" isRequired>
+                        <TextInput
+                            style={styles.input}
+                            value={formData.street}
+                            onChangeText={handleStreetInputChange}
+                            placeholder="Nhập tên đường"
+                            placeholderTextColor="#888"
+                            accessibilityLabel="Nhập tên đường"
+                            editable={!isLoading}
+                        />
+                        {filteredStreets.length > 0 && formData.street.trim() !== '' && (
+                            <FlatList
+                                style={styles.suggestionList}
+                                data={filteredStreets}
+                                renderItem={renderStreetSuggestion}
+                                keyExtractor={(item) => item.id}
+                                keyboardShouldPersistTaps="handled"
+                            />
+                        )}
+                    </InputGroup>
+                </View>
 
                 <View style={styles.fieldRow}>
-                    <InputGroup label=" Số Nhà" isRequired>
-                        <TextInput style={styles.input} value={formData.houseNumber} onChangeText={(text) => handleChange('houseNumber', text)} />
+                    <InputGroup label="Số Nhà" isRequired>
+                        <TextInput
+                            style={styles.input}
+                            value={formData.houseNumber}
+                            onChangeText={(text) => handleChange('houseNumber', text)}
+                            accessibilityLabel="Nhập số nhà"
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Số Thửa">
-                        <TextInput style={styles.input} value={formData.lotNumber} onChangeText={(text) => handleChange('lotNumber', text)} />
+                        <TextInput
+                            style={styles.input}
+                            value={formData.lotNumber}
+                            onChangeText={(text) => handleChange('lotNumber', text)}
+                            accessibilityLabel="Nhập số thửa"
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
 
                 <View style={styles.fieldRow}>
                     <InputGroup label="Số Tờ">
-                        <TextInput style={styles.input} value={formData.sheetNumber} onChangeText={(text) => handleChange('sheetNumber', text)} />
+                        <TextInput
+                            style={styles.input}
+                            value={formData.sheetNumber}
+                            onChangeText={(text) => handleChange('sheetNumber', text)}
+                            accessibilityLabel="Nhập số tờ"
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Số Lô">
-                        <TextInput style={styles.input} value={formData.blockNumber} onChangeText={(text) => handleChange('blockNumber', text)} />
+                        <TextInput
+                            style={styles.input}
+                            value={formData.blockNumber}
+                            onChangeText={(text) => handleChange('blockNumber', text)}
+                            accessibilityLabel="Nhập số lô"
+                            editable={!isLoading}
+                        />
+                    </InputGroup>
+                </View>
+
+                <View style={styles.fullWidthField}>
+                    <InputGroup label="Khu Vực">
+                        <TextInput
+                            style={styles.input}
+                            value={formData.areaDescription}
+                            onChangeText={(text) => handleChange('areaDescription', text)}
+                            placeholder="Ví dụ: CityLand, Trung Sơn, Cư Xá Phú Lâm"
+                            placeholderTextColor="#888"
+                            accessibilityLabel="Nhập mô tả khu vực"
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
             </Section>
 
-            {/* Section 3: Diện Tích Đất */}
             <Section title="Diện Tích Đất">
                 <View style={styles.fieldRow}>
                     <InputGroup label="Chiều rộng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.landWidth} onChangeText={(text) => handleChange('landWidth', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.landWidth}
+                            onChangeText={(text) => handleChange('landWidth', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Chiều dài">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.landLength} onChangeText={(text) => handleChange('landLength', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.landLength}
+                            onChangeText={(text) => handleChange('landLength', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Mặt Hậu">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.backWidth} onChangeText={(text) => handleChange('backWidth', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.backWidth}
+                            onChangeText={(text) => handleChange('backWidth', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
                 <View style={styles.fullWidthField}>
                     <InputGroup label="DT Công nhận">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.landArea} onChangeText={(text) => handleChange('landArea', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.landArea}
+                            onChangeText={(text) => handleChange('landArea', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
             </Section>
 
-            {/* Section 4: Diện Tích Quy Hoạch */}
             <Section title="Diện Tích Quy Hoạch">
                 <View style={styles.fieldRow}>
                     <InputGroup label="Chiều rộng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.plannedWidth} onChangeText={(text) => handleChange('plannedWidth', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.plannedWidth}
+                            onChangeText={(text) => handleChange('plannedWidth', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Chiều dài">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.plannedLength} onChangeText={(text) => handleChange('plannedLength', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.plannedLength}
+                            onChangeText={(text) => handleChange('plannedLength', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Mặt Hậu">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.plannedBackWidth} onChangeText={(text) => handleChange('plannedBackWidth', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.plannedBackWidth}
+                            onChangeText={(text) => handleChange('plannedBackWidth', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
                 <View style={styles.fullWidthField}>
                     <InputGroup label="DT Xây dựng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.plannedArea} onChangeText={(text) => handleChange('plannedArea', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.plannedArea}
+                            onChangeText={(text) => handleChange('plannedArea', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
             </Section>
 
-            {/* Section 5: Thông tin khác */}
             <Section title="Thông tin khác">
                 <View style={styles.fieldRow}>
                     <InputGroup label="Loại sản phẩm">
@@ -443,10 +637,11 @@ const ListingFormAdvanced = ({ navigation }) => {
                                 selectedValue={formData.productType}
                                 onValueChange={(itemValue) => handleChange('productType', itemValue)}
                                 style={styles.picker}
+                                enabled={!isLoading}
                             >
-                                <Picker.Item label="Chọn Loại Sản Phẩm" value={null} />
-                                <Picker.Item label="Đất trống" value="empty_land" />
-                                <Picker.Item label="Nhà ở" value="house" />
+                                {productTypeOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
                             </Picker>
                         </View>
                     </InputGroup>
@@ -456,10 +651,11 @@ const ListingFormAdvanced = ({ navigation }) => {
                                 selectedValue={formData.direction}
                                 onValueChange={(itemValue) => handleChange('direction', itemValue)}
                                 style={styles.picker}
+                                enabled={!isLoading}
                             >
-                                <Picker.Item label="Chọn Hướng" value={null} />
-                                <Picker.Item label="Đông" value="east" />
-                                <Picker.Item label="Tây" value="west" />
+                                {directionOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
                             </Picker>
                         </View>
                     </InputGroup>
@@ -469,7 +665,11 @@ const ListingFormAdvanced = ({ navigation }) => {
                                 selectedValue={formData.landType}
                                 onValueChange={(itemValue) => handleChange('landType', itemValue)}
                                 style={styles.picker}
+                                enabled={!isLoading}
                             >
+                                {landTypeOptions.map((item) => (
+                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                ))}
                             </Picker>
                         </View>
                     </InputGroup>
@@ -477,70 +677,106 @@ const ListingFormAdvanced = ({ navigation }) => {
 
                 <View style={styles.fieldRow}>
                     <InputGroup label="Đường rộng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.streetWidth} onChangeText={(text) => handleChange('streetWidth', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.streetWidth}
+                            onChangeText={(text) => handleChange('streetWidth', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="DT Sử dụng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.usedArea} onChangeText={(text) => handleChange('usedArea', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.usedArea}
+                            onChangeText={(text) => handleChange('usedArea', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
 
                 <View style={styles.fieldRow}>
                     <InputGroup label="Số Tầng">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.floors} onChangeText={(text) => handleChange('floors', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.floors}
+                            onChangeText={(text) => handleChange('floors', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="Số tầng hầm">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.basements} onChangeText={(text) => handleChange('basements', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.basements}
+                            onChangeText={(text) => handleChange('basements', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="PN">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.beds} onChangeText={(text) => handleChange('beds', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.beds}
+                            onChangeText={(text) => handleChange('beds', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                     <InputGroup label="WC">
-                        <TextInput style={styles.input} keyboardType="numeric" value={formData.baths} onChangeText={(text) => handleChange('baths', text)} />
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={formData.baths}
+                            onChangeText={(text) => handleChange('baths', text)}
+                            editable={!isLoading}
+                        />
                     </InputGroup>
                 </View>
             </Section>
 
-            {/* Section 6: Ưu & Nhược điểm */}
             <Section title="Ưu điểm & Nhược điểm">
                 <View style={styles.prosConsContainer}>
                     <View style={styles.prosConsColumn}>
                         <Text style={styles.prosConsTitle}>Ưu điểm</Text>
-                        {prosConsOptions.pros.map(option => (
-                            <View key={option} style={styles.checkboxItem}>
+                        {prosConsOptions.pros.map((option) => (
+                            <View key={option.id} style={styles.checkboxItem}>
                                 <TouchableOpacity
-                                    onPress={() => handleToggleProsCons('selectedPros', option)}
+                                    onPress={() => handleToggleProsCons('selectedPros', option.name)}
+                                    disabled={isLoading}
                                 >
                                     <Icon
-                                        name={formData.selectedPros.has(option) ? "checkbox-marked" : "checkbox-blank-outline"}
+                                        name={formData.selectedPros.has(option.name) ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                         size={20}
-                                        color={formData.selectedPros.has(option) ? colors.secondary : '#888'}
+                                        color={formData.selectedPros.has(option.name) ? colors.secondary : '#888'}
                                     />
                                 </TouchableOpacity>
-                                <Text style={styles.checkboxText}>{option}</Text>
+                                <Text style={styles.checkboxText}>{option.name}</Text>
                             </View>
                         ))}
                     </View>
                     <View style={styles.prosConsColumn}>
                         <Text style={styles.prosConsTitle}>Nhược điểm</Text>
-                        {prosConsOptions.cons.map(option => (
-                            <View key={option} style={styles.checkboxItem}>
+                        {prosConsOptions.cons.map((option) => (
+                            <View key={option.id} style={styles.checkboxItem}>
                                 <TouchableOpacity
-                                    onPress={() => handleToggleProsCons('selectedCons', option)}
+                                    onPress={() => handleToggleProsCons('selectedCons', option.disadvantage_name)}
+                                    disabled={isLoading}
                                 >
                                     <Icon
-                                        name={formData.selectedCons.has(option) ? "checkbox-marked" : "checkbox-blank-outline"}
+                                        name={formData.selectedCons.has(option.disadvantage_name) ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                         size={20}
-                                        color={formData.selectedCons.has(option) ? colors.secondary : '#888'}
+                                        color={formData.selectedCons.has(option.disadvantage_name) ? colors.secondary : '#888'}
                                     />
                                 </TouchableOpacity>
-                                <Text style={styles.checkboxText}>{option}</Text>
+                                <Text style={styles.checkboxText}>{option.disadvantage_name}</Text>
                             </View>
                         ))}
                     </View>
                 </View>
             </Section>
 
-            {/* Section 7: Ghi chú */}
             <Section title="Ghi chú">
                 <TextInput
                     style={[styles.input, styles.textArea]}
@@ -548,6 +784,7 @@ const ListingFormAdvanced = ({ navigation }) => {
                     numberOfLines={4}
                     value={formData.notes}
                     onChangeText={(text) => handleChange('notes', text)}
+                    editable={!isLoading}
                 />
             </Section>
         </>
@@ -558,21 +795,19 @@ const ListingFormAdvanced = ({ navigation }) => {
         <View style={styles.imagesTabContent}>
             <Text style={styles.imageSectionTitle}>Hình ảnh đã tải lên</Text>
 
-            {/* Vùng tải lên Sổ hồng */}
             <View style={styles.imageUploadRow}>
                 <View style={styles.imageUploadBox}>
                     <Text style={styles.uploadBoxTitle}>SỔ HỒNG | GIẤY TỜ PHÁP LÝ</Text>
-                    <TouchableOpacity style={styles.uploadBoxButton} onPress={() => handleImagePicker('redBook')}>
+                    <TouchableOpacity style={styles.uploadBoxButton} onPress={() => handleImagePicker('redBook')} disabled={isLoading}>
                         <Icon name="cloud-upload-outline" size={40} color={colors.secondary} />
                         <Text style={styles.uploadBoxText}>Chọn hoặc kéo thả</Text>
                         <Text style={styles.uploadBoxSubText}>File: pdf, jpg, png, jpeg, webp, heic!</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Vùng tải lên Hình ảnh bổ sung */}
                 <View style={styles.imageUploadBox}>
                     <Text style={styles.uploadBoxTitle}>HÌNH ẢNH BỔ SUNG</Text>
-                    <TouchableOpacity style={styles.uploadBoxButton} onPress={() => handleImagePicker('additional')}>
+                    <TouchableOpacity style={styles.uploadBoxButton} onPress={() => handleImagePicker('additional')} disabled={isLoading}>
                         <Icon name="cloud-upload-outline" size={40} color={colors.secondary} />
                         <Text style={styles.uploadBoxText}>Chọn hoặc kéo thả</Text>
                         <Text style={styles.uploadBoxSubText}>File: pdf, jpg, png, jpeg, webp, heic!</Text>
@@ -580,24 +815,30 @@ const ListingFormAdvanced = ({ navigation }) => {
                 </View>
             </View>
 
-            {/* Hiển thị danh sách hình ảnh Sổ hồng đã tải lên */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
                 {redBookImages.map((image, index) => (
                     <View key={index} style={styles.imagePreviewContainer}>
                         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
-                        <TouchableOpacity onPress={() => handleRemoveImage('redBook', index)} style={styles.removeImageButton}>
+                        <TouchableOpacity
+                            onPress={() => handleRemoveImage('redBook', index)}
+                            style={styles.removeImageButton}
+                            disabled={isLoading}
+                        >
                             <Icon name="trash-can-outline" size={20} color="#fff" />
                         </TouchableOpacity>
                     </View>
                 ))}
             </ScrollView>
 
-            {/* Hiển thị danh sách hình ảnh bổ sung đã tải lên */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
                 {additionalImages.map((image, index) => (
                     <View key={index} style={styles.imagePreviewContainer}>
                         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
-                        <TouchableOpacity onPress={() => handleRemoveImage('additional', index)} style={styles.removeImageButton}>
+                        <TouchableOpacity
+                            onPress={() => handleRemoveImage('additional', index)}
+                            style={styles.removeImageButton}
+                            disabled={isLoading}
+                        >
                             <Icon name="trash-can-outline" size={20} color="#fff" />
                         </TouchableOpacity>
                     </View>
@@ -608,45 +849,29 @@ const ListingFormAdvanced = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerText}>DỮ LIỆU NHÀ ĐẤT</Text>
-                <TouchableOpacity onPress={handleGoBack} style={styles.closeButton}>
+                <TouchableOpacity onPress={handleGoBack} style={styles.closeButton} disabled={isLoading}>
                     <Icon name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
             </View>
 
-            {/* Tabs */}
             <View style={styles.tabsContainer}>
                 <TouchableOpacity
-                    style={[
-                        styles.tabButton,
-                        selectedTab === 'Dữ Liệu Nhà Đất' && styles.tabButtonSelected,
-                    ]}
+                    style={[styles.tabButton, selectedTab === 'Dữ Liệu Nhà Đất' && styles.tabButtonSelected]}
                     onPress={() => setSelectedTab('Dữ Liệu Nhà Đất')}
+                    disabled={isLoading}
                 >
-                    <Text
-                        style={[
-                            styles.tabButtonText,
-                            selectedTab === 'Dữ Liệu Nhà Đất' && styles.tabButtonTextSelected,
-                        ]}
-                    >
+                    <Text style={[styles.tabButtonText, selectedTab === 'Dữ Liệu Nhà Đất' && styles.tabButtonTextSelected]}>
                         DỮ LIỆU NHÀ ĐẤT
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[
-                        styles.tabButton,
-                        selectedTab === 'Sổ Hồng & Hình Ảnh' && styles.tabButtonSelected,
-                    ]}
+                    style={[styles.tabButton, selectedTab === 'Sổ Hồng & Hình Ảnh' && styles.tabButtonSelected]}
                     onPress={() => setSelectedTab('Sổ Hồng & Hình Ảnh')}
+                    disabled={isLoading}
                 >
-                    <Text
-                        style={[
-                            styles.tabButtonText,
-                            selectedTab === 'Sổ Hồng & Hình Ảnh' && styles.tabButtonTextSelected,
-                        ]}
-                    >
+                    <Text style={[styles.tabButtonText, selectedTab === 'Sổ Hồng & Hình Ảnh' && styles.tabButtonTextSelected]}>
                         SỔ HỒNG & HÌNH ẢNH
                     </Text>
                 </TouchableOpacity>
@@ -656,25 +881,34 @@ const ListingFormAdvanced = ({ navigation }) => {
                 {selectedTab === 'Dữ Liệu Nhà Đất' ? renderDataForm() : renderImagesForm()}
             </ScrollView>
 
-            {/* Footer Buttons */}
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.cancelButton} onPress={handleGoBack}>
+                <TouchableOpacity
+                    style={[styles.cancelButton, isLoading && styles.buttonDisabled]}
+                    onPress={handleGoBack}
+                    disabled={isLoading}
+                >
                     <Text style={styles.buttonText}>TRỞ LẠI</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.continueButton} onPress={handleSubmit}>
-                    <Text style={styles.buttonText}>LƯU</Text>
+                <TouchableOpacity
+                    style={[styles.continueButton, isLoading && styles.buttonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={isLoading}
+                >
+                    <Text style={styles.buttonText}>{isLoading ? 'ĐANG XỬ LÝ...' : 'LƯU'}</Text>
                 </TouchableOpacity>
             </View>
+
             <AddContactForm
                 visible={isContactModalVisible}
                 onClose={() => setIsContactModalVisible(false)}
                 onSave={handleSaveContact}
             />
             <TouchableOpacity
-                style={styles.fab}
+                style={[styles.fab, isLoading && styles.buttonDisabled]}
                 onPress={() => setIsContactModalVisible(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Thêm Liên Hệ"
+                disabled={isLoading}
             >
                 <Icon name="account-plus" size={28} color="#FFFFFF" />
             </TouchableOpacity>
@@ -732,18 +966,6 @@ const styles = StyleSheet.create({
     formContainer: {
         flex: 1,
         padding: 10,
-    },
-    imagesTabContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-    },
-    imagesPlaceholderText: {
-        fontSize: 16,
-        color: colors.textSecondary,
-        textAlign: 'center',
-        marginBottom: 10,
     },
     sectionContainer: {
         backgroundColor: '#FFF',
@@ -821,7 +1043,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     picker: {
-        height: 55,
+        height: 40,
         width: '100%',
         color: colors.textPrimary,
     },
@@ -898,6 +1120,9 @@ const styles = StyleSheet.create({
         marginRight: 10,
         paddingVertical: 12,
         borderRadius: 8,
+    },
+    buttonDisabled: {
+        backgroundColor: '#cccccc',
     },
     buttonText: {
         color: '#fff',
@@ -979,34 +1204,22 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         padding: 3,
     },
-    buttonContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 15,
-        borderTopWidth: 1,
-        borderTopColor: '#ddd',
+    suggestionList: {
+        maxHeight: 150,
         backgroundColor: '#fff',
-        paddingHorizontal: 20,
-    },
-    continueButton: {
-        backgroundColor: colors.secondary,
-        flex: 1,
-        marginLeft: 10,
-        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
         borderRadius: 8,
+        marginTop: 5,
     },
-    cancelButton: {
-        backgroundColor: colors.error,
-        flex: 1,
-        marginRight: 10,
-        paddingVertical: 12,
-        borderRadius: 8,
+    suggestionItem: {
+        padding: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
     },
-    buttonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        fontSize: 16,
+    suggestionText: {
+        fontSize: 14,
+        color: colors.textPrimary,
     },
     fab: {
         position: 'absolute',
@@ -1024,18 +1237,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 4,
         zIndex: 1000,
-    },
-    favoriteButton: {
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 15,
-        width: 30,
-        height: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
     },
 });
 
