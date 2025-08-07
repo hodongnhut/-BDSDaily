@@ -89,6 +89,12 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            storeFile file(getProperty('HAPPYGO24H_RELEASE_STORE_FILE'))
+            storePassword getProperty('HAPPYGO24H_RELEASE_STORE_PASSWORD')
+            keyAlias getProperty('HAPPYGO24H_RELEASE_KEY_ALIAS')
+            keyPassword getProperty('HAPPYGO24H_RELEASE_KEY_PASSWORD')
+        }
     }
     buildTypes {
         debug {

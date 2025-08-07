@@ -1,0 +1,21 @@
+// src/styles/colors.js
+export const colors = {
+    primary: '#3B82F6',
+    secondary: '#006F56',
+    white: '#FFFFFF',
+    textDark: '#1F2937',
+    textMedium: '#4B5563',
+    textLight: '#6B7280',
+    error: '#EF4444',
+    success: '#34D399',
+    warning: '#D97706',
+    info: '#3B82F6',
+    buttonPrimary: '#2563EB',
+    buttonInsight: '#7C3AED',
+    buttonInvestment: '#D97706',
+    buttonScript: '#4F46E5',
+    buttonContact: '#059669',
+    buttonCancel: '#9CA3AF',
+    inputBackground: '#F9FAFB',
+    border: '#D1D5DB',
+};
