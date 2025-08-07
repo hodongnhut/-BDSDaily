@@ -1,113 +1,166 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
     TextInput,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
     SafeAreaView,
+    FlatList,
+    Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../styles/colors';
+import { colors } from '../styles/colors'; // Ensure this is correctly imported
 import { fetchWards, createProperty } from '../services/api';
 
+// Property types and district options
 const propertyTypes = [
-    { label: "Biệt thự", value: "13" },
-    { label: "Căn hộ", value: "17" },
-    { label: "Căn Hộ Dịch Vụ", value: "12" },
-    { label: "Cao ốc", value: "16" },
-    { label: "Chưa chọn", value: "30" },
-    { label: "Condotel", value: "19" },
-    { label: "Đất", value: "24" },
-    { label: "Góc 2 mặt tiền", value: "28" },
-    { label: "Karaoke", value: "25" },
-    { label: "Khác", value: "27" },
-    { label: "Khách Sạn", value: "15" },
-    { label: "Kho xưởng", value: "23" },
-    { label: "Mặt Bằng", value: "22" },
-    { label: "Nhà Cấp 4", value: "9" },
-    { label: "Nhà Hẻm, Ngõ", value: "10" },
-    { label: "Nhà Nát", value: "11" },
-    { label: "Nhà phố", value: "8" },
-    { label: "Nhà Phố & Biệt thự", value: "14" },
-    { label: "Phòng Trọ", value: "26" },
-    { label: "ShopHouse", value: "18" },
-    { label: "Tòa Nhà Văn Phòng", value: "21" },
-    { label: "Văn Phòng", value: "20" }
+    { label: 'Chưa chọn', value: '30' },
+    { label: 'Biệt thự', value: '13' },
+    { label: 'Căn hộ', value: '17' },
+    { label: 'Căn Hộ Dịch Vụ', value: '12' },
+    { label: 'Cao ốc', value: '16' },
+    { label: 'Condotel', value: '19' },
+    { label: 'Đất', value: '24' },
+    { label: 'Góc 2 mặt tiền', value: '28' },
+    { label: 'Karaoke', value: '25' },
+    { label: 'Khác', value: '27' },
+    { label: 'Khách Sạn', value: '15' },
+    { label: 'Kho xưởng', value: '23' },
+    { label: 'Mặt Bằng', value: '22' },
+    { label: 'Nhà Cấp 4', value: '9' },
+    { label: 'Nhà Hẻm, Ngõ', value: '10' },
+    { label: 'Nhà Nát', value: '11' },
+    { label: 'Nhà phố', value: '8' },
+    { label: 'Nhà Phố & Biệt thự', value: '14' },
+    { label: 'Phòng Trọ', value: '26' },
+    { label: 'ShopHouse', value: '18' },
+    { label: 'Tòa Nhà Văn Phòng', value: '21' },
+    { label: 'Văn Phòng', value: '20' },
 ];
 
 const districtOptions = [
-    { label: "Chọn Quận Huyện...", value: null },
-    { label: "Quận 1", value: "Quận 1" },
-    { label: "Quận 12", value: "Quận 12" },
-    { label: "Gò Vấp", value: "Gò Vấp" },
-    { label: "Bình Thạnh", value: "Bình Thạnh" },
-    { label: "Tân Bình", value: "Tân Bình" },
-    { label: "Tân Phú", value: "Tân Phú" },
-    { label: "Phú Nhuận", value: "Phú Nhuận" },
-    { label: "Thành phố Thủ Đức", value: "Thành phố Thủ Đức" },
-    { label: "Quận 3", value: "Quận 3" },
-    { label: "Quận 10", value: "Quận 10" },
-    { label: "Quận 11", value: "Quận 11" },
-    { label: "Quận 4", value: "Quận 4" },
-    { label: "Quận 5", value: "Quận 5" },
-    { label: "Quận 6", value: "Quận 6" },
-    { label: "Quận 8", value: "Quận 8" },
-    { label: "Bình Tân", value: "Bình Tân" },
-    { label: "Quận 7", value: "Quận 7" },
-    { label: "Huyện Củ Chi", value: "Huyện Củ Chi" },
-    { label: "Huyện Hóc Môn", value: "Huyện Hóc Môn" },
-    { label: "Huyện Bình Chánh", value: "Huyện Bình Chánh" },
-    { label: "Huyện Nhà Bè", value: "Huyện Nhà Bè" },
-    { label: "Huyện Cần Giờ", value: "Huyện Cần Giờ" },
+    { label: 'Chọn Quận Huyện...', value: null },
+    { label: 'Quận 1', value: 'Quận 1' },
+    { label: 'Quận 12', value: 'Quận 12' },
+    { label: 'Gò Vấp', value: 'Gò Vấp' },
+    { label: 'Bình Thạnh', value: 'Bình Thạnh' },
+    { label: 'Tân Bình', value: 'Tân Bình' },
+    { label: 'Tân Phú', value: 'Tân Phú' },
+    { label: 'Phú Nhuận', value: 'Phú Nhuận' },
+    { label: 'Thủ Đức', value: 'Thủ Đức' },
+    { label: 'Quận 3', value: 'Quận 3' },
+    { label: 'Quận 10', value: 'Quận 10' },
+    { label: 'Quận 11', value: 'Quận 11' },
+    { label: 'Quận 4', value: 'Quận 4' },
+    { label: 'Quận 5', value: 'Quận 5' },
+    { label: 'Quận 6', value: 'Quận 6' },
+    { label: 'Quận 8', value: 'Quận 8' },
+    { label: 'Bình Tân', value: 'Bình Tân' },
+    { label: 'Quận 7', value: 'Quận 7' },
+    { label: 'Huyện Củ Chi', value: 'Huyện Củ Chi' },
+    { label: 'Huyện Hóc Môn', value: 'Huyện Hóc Môn' },
+    { label: 'Huyện Bình Chánh', value: 'Huyện Bình Chánh' },
+    { label: 'Huyện Nhà Bè', value: 'Huyện Nhà Bè' },
+    { label: 'Huyện Cần Giờ', value: 'Huyện Cần Giờ' },
 ];
 
 const ListingForm = ({ onClose, navigation }) => {
     const [transactionType, setTransactionType] = useState('Bán');
-    const [propertyType, setPropertyType] = useState(null);
+    const [propertyType, setPropertyType] = useState('');
     const [district, setDistrict] = useState(null);
     const [ward, setWard] = useState(null);
+    const [street, setStreet] = useState('');
     const [wards, setWards] = useState([]);
-    const [street, setStreet] = useState(null);
+    const [streets, setStreets] = useState([]);
+    const [filteredStreets, setFilteredStreets] = useState([]);
     const [houseNumber, setHouseNumber] = useState('');
     const [lotNumber, setLotNumber] = useState('');
     const [sheetNumber, setSheetNumber] = useState('');
     const [blockNumber, setBlockNumber] = useState('');
     const [areaDescription, setAreaDescription] = useState('');
+    const [locationCache, setLocationCache] = useState({});
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleDistrictChange = async (districtValue) => {
+
+    const handleDistrictChange = useCallback(async (districtValue) => {
         setDistrict(districtValue);
         setWard(null);
-        if (districtValue) {
-            try {
-                const wardData = await fetchWards(districtValue);
-                setWards(wardData.map(item => ({ label: `${item.Name}`, value: item.Name })));
-            } catch (error) {
-                console.error(error.message);
-            }
-        } else {
+        setStreet('');
+        setFilteredStreets([]);
+        if (!districtValue) {
             setWards([]);
+            setStreets([]);
+            return;
         }
-    };
+
+
+        if (locationCache[districtValue]) {
+            setWards(locationCache[districtValue].wards);
+            setStreets(locationCache[districtValue].streets);
+            setFilteredStreets(locationCache[districtValue].streets);
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const { wards, streets } = await fetchWards(districtValue);
+            setWards(wards);
+            setStreets(streets);
+            setFilteredStreets(streets);
+            setLocationCache((prev) => ({
+                ...prev,
+                [districtValue]: { wards, streets },
+            }));
+        } catch (error) {
+            Alert.alert('Error', error.message || 'Failed to fetch wards and streets.');
+            setWards([]);
+            setStreets([]);
+            setFilteredStreets([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [locationCache]);
+
+
+    const handleStreetInputChange = useCallback(
+        (text) => {
+            setStreet(text);
+            if (text.trim() === '') {
+                setFilteredStreets(streets);
+            } else {
+                const filtered = streets.filter((item) =>
+                    item.Name.toLowerCase().includes(text.toLowerCase())
+                );
+                setFilteredStreets(filtered);
+            }
+        },
+        [streets]
+    );
+
+
+    const handleStreetSelect = useCallback((streetName) => {
+        setStreet(streetName);
+        setFilteredStreets([]);
+    }, []);
 
     const handleContinue = async () => {
-        // Validate required fields
         const missingFields = [];
         if (!transactionType) missingFields.push('Loại Giao Dịch');
         if (!propertyType) missingFields.push('Loại BĐS');
         if (!district) missingFields.push('Quận Huyện');
         if (!ward) missingFields.push('Phường/Xã');
-        if (!street || street.trim() === '') missingFields.push('Đường');
-        if (!houseNumber || houseNumber.trim() === '') missingFields.push('Số Nhà');
+        if (!street.trim()) missingFields.push('Đường');
+        if (!houseNumber.trim()) missingFields.push('Số Nhà');
 
         if (missingFields.length > 0) {
-            alert(`Vui lòng điền đầy đủ các trường bắt buộc: ${missingFields.join(', ')}`);
+            Alert.alert('Missing Fields', `Please fill in: ${missingFields.join(', ')}`);
             return;
         }
 
         try {
+            setIsLoading(true);
             const propertyData = {
                 listing_types_id: transactionType === 'Bán' ? 1 : 2,
                 property_type_id: parseInt(propertyType, 10),
@@ -124,200 +177,284 @@ const ListingForm = ({ onClose, navigation }) => {
             const response = await createProperty(propertyData);
             navigation.navigate('ListingFormAdvanced', { basicData: propertyData, response });
         } catch (error) {
-            console.error(error.message);
-            alert(error.message);
+            Alert.alert('Error', error.message || 'Failed to create property.');
+        } finally {
+            setIsLoading(false);
         }
     };
+    const memoizedPropertyTypes = useMemo(() => propertyTypes, []);
+    const memoizedDistrictOptions = useMemo(() => districtOptions, []);
+
+    const renderStreetSuggestion = ({ item }) => (
+        <TouchableOpacity
+            style={styles.suggestionItem}
+            onPress={() => handleStreetSelect(item.Name)}
+            accessibilityLabel={`Select street ${item.Name}`}
+        >
+            <Text style={styles.suggestionText}>{item.Name}</Text>
+        </TouchableOpacity>
+    );
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerText}>DỮ LIỆU NHÀ ĐẤT</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <TouchableOpacity
+                    onPress={onClose}
+                    style={styles.closeButton}
+                    accessibilityLabel="Close form"
+                    disabled={isLoading}
+                >
                     <Icon name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
             </View>
-            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-                {/* Loại Giao Dịch */}
-                <View style={styles.fullWidthField}>
-                    <View style={styles.labelContainer}>
-                        <Text style={styles.asterisk}>*</Text>
-                        <Text style={styles.label}> Loại Giao Dịch</Text>
-                    </View>
-                    <View style={styles.radioGroup}>
-                        <TouchableOpacity
-                            style={[
-                                styles.radioButton,
-                                transactionType === 'Bán' && styles.radioButtonSelected,
-                            ]}
-                            onPress={() => setTransactionType('Bán')}
-                        >
-                            <Text style={[styles.radioText, transactionType === 'Bán' && styles.radioTextSelected]}>Bán</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[
-                                styles.radioButton,
-                                transactionType === 'Cho Thuê' && styles.radioButtonSelected,
-                            ]}
-                            onPress={() => setTransactionType('Cho Thuê')}
-                        >
-                            <Text style={[styles.radioText, transactionType === 'Cho Thuê' && styles.radioTextSelected]}>Cho Thuê</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+            <FlatList
+                style={styles.formContainer}
+                data={[]}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={null}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={
+                    <>
+                        {/* Loại Giao Dịch */}
+                        <View style={styles.fullWidthField}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.asterisk}>*</Text>
+                                <Text style={styles.label}> Loại Giao Dịch</Text>
+                            </View>
+                            <View style={styles.radioGroup}>
+                                <TouchableOpacity
+                                    style={[styles.radioButton, transactionType === 'Bán' && styles.radioButtonSelected]}
+                                    onPress={() => setTransactionType('Bán')}
+                                    accessibilityLabel="Select Bán"
+                                    disabled={isLoading}
+                                >
+                                    <Text
+                                        style={[styles.radioText, transactionType === 'Bán' && styles.radioTextSelected]}
+                                    >
+                                        Bán
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.radioButton,
+                                        transactionType === 'Cho Thuê' && styles.radioButtonSelected,
+                                    ]}
+                                    onPress={() => setTransactionType('Cho Thuê')}
+                                    accessibilityLabel="Select Cho Thuê"
+                                    disabled={isLoading}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.radioText,
+                                            transactionType === 'Cho Thuê' && styles.radioTextSelected,
+                                        ]}
+                                    >
+                                        Cho Thuê
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
 
-                {/* Loại BĐS và Tỉnh Thành */}
-                <View style={styles.fieldRow}>
-                    <View style={styles.fieldGroup}>
-                        <View style={styles.labelContainer}>
-                            <Text style={styles.asterisk}>*</Text>
-                            <Text style={styles.label}> Loại BĐS</Text>
+                        {/* Loại BĐS và Tỉnh Thành */}
+                        <View style={styles.fieldRow}>
+                            <View style={styles.fieldGroup}>
+                                <View style={styles.labelContainer}>
+                                    <Text style={styles.asterisk}>*</Text>
+                                    <Text style={styles.label}> Loại BĐS</Text>
+                                </View>
+                                <View style={styles.pickerContainer}>
+                                    <Picker
+                                        selectedValue={propertyType}
+                                        onValueChange={setPropertyType}
+                                        style={styles.picker}
+                                        accessibilityLabel="Select property type"
+                                        enabled={!isLoading}
+                                    >
+                                        <Picker.Item label="Chọn Loại BĐS" value="" />
+                                        {memoizedPropertyTypes.map((item) => (
+                                            <Picker.Item key={item.value} label={item.label} value={item.value} />
+                                        ))}
+                                    </Picker>
+                                </View>
+                            </View>
+                            <View style={styles.fieldGroup}>
+                                <View style={styles.labelContainer}>
+                                    <Text style={styles.asterisk}>*</Text>
+                                    <Text style={styles.label}> Tỉnh Thành</Text>
+                                </View>
+                                <View style={styles.staticInput}>
+                                    <Text style={styles.staticText}>Hồ Chí Minh</Text>
+                                </View>
+                            </View>
                         </View>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={propertyType}
-                                onValueChange={(itemValue) => setPropertyType(itemValue)}
-                            >
-                                <Picker.Item label="Chọn Loại BĐS" value="" />
-                                {propertyTypes.map((item) => (
-                                    <Picker.Item key={item.value} label={item.label} value={item.value} />
-                                ))}
-                            </Picker>
-                        </View>
-                    </View>
-                    <View style={styles.fieldGroup}>
-                        <View style={styles.labelContainer}>
-                            <Text style={styles.asterisk}>*</Text>
-                            <Text style={styles.label}> Tỉnh Thành</Text>
-                        </View>
-                        <View style={styles.staticInput}>
-                            <Text style={styles.staticText}>Hồ Chí Minh</Text>
-                        </View>
-                    </View>
-                </View>
 
-                {/* Quận Huyện và Phường/Xã */}
-                <View style={styles.fieldRow}>
-                    <View style={styles.fieldGroup}>
-                        <View style={styles.labelContainer}>
-                            <Text style={styles.asterisk}>*</Text>
-                            <Text style={styles.label}> Quận Huyện</Text>
+                        {/* Quận Huyện và Phường/Xã */}
+                        <View style={styles.fieldRow}>
+                            <View style={styles.fieldGroup}>
+                                <View style={styles.labelContainer}>
+                                    <Text style={styles.asterisk}>*</Text>
+                                    <Text style={styles.label}> Quận Huyện</Text>
+                                </View>
+                                <View style={styles.pickerContainer}>
+                                    <Picker
+                                        selectedValue={district}
+                                        onValueChange={handleDistrictChange}
+                                        style={styles.picker}
+                                        accessibilityLabel="Select district"
+                                        enabled={!isLoading}
+                                    >
+                                        {memoizedDistrictOptions.map((item) => (
+                                            <Picker.Item
+                                                key={item.value || 'placeholder'}
+                                                label={item.label}
+                                                value={item.value}
+                                                style={styles.pickerItem}
+                                            />
+                                        ))}
+                                    </Picker>
+                                </View>
+                            </View>
+                            <View style={styles.fieldGroup}>
+                                <View style={styles.labelContainer}>
+                                    <Text style={styles.asterisk}>*</Text>
+                                    <Text style={styles.label}> Phường / Xã</Text>
+                                </View>
+                                <View style={styles.pickerContainer}>
+                                    <Picker
+                                        selectedValue={ward}
+                                        onValueChange={setWard}
+                                        style={styles.picker}
+                                        enabled={wards.length > 0 && !isLoading}
+                                        accessibilityLabel="Select ward"
+                                    >
+                                        <Picker.Item label="Chọn Phường / Xã" value={null} style={styles.pickerItem} />
+                                        {wards.map((item) => (
+                                            <Picker.Item
+                                                key={item.id}
+                                                label={item.Name}
+                                                value={item.Name}
+                                                style={styles.pickerItem}
+                                            />
+                                        ))}
+                                    </Picker>
+                                </View>
+                            </View>
                         </View>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={district}
-                                onValueChange={handleDistrictChange}
-                                style={styles.picker}
-                            >
-                                {districtOptions.map((item) => (
-                                    <Picker.Item
-                                        key={item.value || 'placeholder'}
-                                        label={item.label}
-                                        value={item.value}
-                                        style={styles.pickerItem}
-                                    />
-                                ))}
-                            </Picker>
+
+                        {/* Đường with Autocomplete */}
+                        <View style={styles.fullWidthField}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.asterisk}>*</Text>
+                                <Text style={styles.label}> Đường</Text>
+                            </View>
+                            <TextInput
+                                style={styles.input}
+                                value={street}
+                                onChangeText={handleStreetInputChange}
+                                placeholder="Nhập tên đường"
+                                placeholderTextColor="#888"
+                                accessibilityLabel="Enter street name"
+                                editable={!isLoading}
+                            />
+                            {filteredStreets.length > 0 && street.trim() !== '' && (
+                                <FlatList
+                                    style={styles.suggestionList}
+                                    data={filteredStreets}
+                                    renderItem={renderStreetSuggestion}
+                                    keyExtractor={(item) => item.value}
+                                    keyboardShouldPersistTaps="handled"
+                                />
+                            )}
                         </View>
-                    </View>
-                    <View style={styles.fieldGroup}>
-                        <View style={styles.labelContainer}>
-                            <Text style={styles.asterisk}>*</Text>
-                            <Text style={styles.label}> Phường / Xã</Text>
+
+                        {/* Số Nhà và Số Thửa */}
+                        <View style={styles.fieldRow}>
+                            <View style={styles.fieldGroup}>
+                                <View style={styles.labelContainer}>
+                                    <Text style={styles.asterisk}>*</Text>
+                                    <Text style={styles.label}> Số Nhà</Text>
+                                </View>
+                                <TextInput
+                                    style={styles.input}
+                                    value={houseNumber}
+                                    onChangeText={setHouseNumber}
+                                    accessibilityLabel="Enter house number"
+                                    editable={!isLoading}
+                                />
+                            </View>
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.label}>Số Thửa</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={lotNumber}
+                                    onChangeText={setLotNumber}
+                                    accessibilityLabel="Enter lot number"
+                                    editable={!isLoading}
+                                />
+                            </View>
                         </View>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={ward}
-                                onValueChange={(itemValue) => setWard(itemValue)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Chọn Phường / Xã" value={null} style={styles.pickerItem} />
-                                {wards.map((item) => (
-                                    <Picker.Item key={item.value} label={item.label} value={item.value} style={styles.pickerItem} />
-                                ))}
-                            </Picker>
+
+                        {/* Số Tờ và Số Lô */}
+                        <View style={styles.fieldRow}>
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.label}>Số Tờ</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={sheetNumber}
+                                    onChangeText={setSheetNumber}
+                                    accessibilityLabel="Enter sheet number"
+                                    editable={!isLoading}
+                                />
+                            </View>
+                            <View style={styles.fieldGroup}>
+                                <Text style={styles.label}>Số Lô</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={blockNumber}
+                                    onChangeText={setBlockNumber}
+                                    accessibilityLabel="Enter block number"
+                                    editable={!isLoading}
+                                />
+                            </View>
                         </View>
-                    </View>
-                </View>
 
-                {/* Đường */}
-                <View style={styles.fullWidthField}>
-                    <View style={styles.labelContainer}>
-                        <Text style={styles.asterisk}>*</Text>
-                        <Text style={styles.label}> Đường</Text>
-                    </View>
-                    <TextInput
-                        style={styles.input}
-                        value={street}
-                        onChangeText={setStreet}
-                        placeholder="Nhập tên đường"
-                        placeholderTextColor="#888"
-                    />
-                </View>
-
-                {/* Số Nhà và Số Thửa */}
-                <View style={styles.fieldRow}>
-                    <View style={styles.fieldGroup}>
-                        <View style={styles.labelContainer}>
-                            <Text style={styles.asterisk}>*</Text>
-                            <Text style={styles.label}> Số Nhà</Text>
+                        {/* Khu Vực */}
+                        <View style={styles.fullWidthField}>
+                            <Text style={styles.label}>Khu Vực</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={areaDescription}
+                                onChangeText={setAreaDescription}
+                                placeholder="Ví dụ: CityLand, Trung Sơn, Cư Xá Phú Lâm"
+                                placeholderTextColor="#888"
+                                accessibilityLabel="Enter area description"
+                                editable={!isLoading}
+                            />
                         </View>
-                        <TextInput
-                            style={styles.input}
-                            value={houseNumber}
-                            onChangeText={setHouseNumber}
-                        />
-                    </View>
-                    <View style={styles.fieldGroup}>
-                        <Text style={styles.label}>Số Thửa</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={lotNumber}
-                            onChangeText={setLotNumber}
-                        />
-                    </View>
-                </View>
+                    </>
+                }
+            />
 
-                {/* Số Tờ và Số Lô */}
-                <View style={styles.fieldRow}>
-                    <View style={styles.fieldGroup}>
-                        <Text style={styles.label}>Số Tờ</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={sheetNumber}
-                            onChangeText={setSheetNumber}
-                        />
-                    </View>
-                    <View style={styles.fieldGroup}>
-                        <Text style={styles.label}>Số Lô</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={blockNumber}
-                            onChangeText={setBlockNumber}
-                        />
-                    </View>
-                </View>
-
-                {/* Khu Vực */}
-                <View style={styles.fullWidthField}>
-                    <Text style={styles.label}>Khu Vực</Text>
-                    <TextInput
-                        style={styles.input}
-                        value={areaDescription}
-                        onChangeText={setAreaDescription}
-                        placeholder="Ví dụ: CityLand, Trung Sơn, Cư Xá Phú Lâm"
-                        placeholderTextColor="#888"
-                    />
-                </View>
-            </ScrollView>
-
-            {/* Nút hành động */}
+            {/* Action Buttons */}
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={onClose}
+                    accessibilityLabel="Cancel form"
+                    disabled={isLoading}
+                >
                     <Text style={styles.buttonText}>HỦY</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-                    <Text style={styles.buttonText}>TIẾP TỤC</Text>
+                <TouchableOpacity
+                    style={[styles.continueButton, isLoading && styles.buttonDisabled]}
+                    onPress={handleContinue}
+                    accessibilityLabel="Continue to next step"
+                    disabled={isLoading}
+                >
+                    <Text style={styles.buttonText}>
+                        {isLoading ? 'ĐANG XỬ LÝ...' : 'TIẾP TỤC'}
+                    </Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -405,11 +542,8 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         backgroundColor: '#fff',
         overflow: 'hidden',
-        height: 40,
-        justifyContent: 'center',
     },
     picker: {
-        height: 55,
         width: '100%',
         color: colors.textPrimary,
     },
@@ -469,11 +603,31 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 8,
     },
+    buttonDisabled: {
+        backgroundColor: '#cccccc',
+    },
     buttonText: {
         color: '#fff',
         fontWeight: 'bold',
         textAlign: 'center',
         fontSize: 16,
+    },
+    suggestionList: {
+        maxHeight: 17,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        borderRadius: 8,
+        marginTop: 5,
+    },
+    suggestionItem: {
+        padding: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
+    },
+    suggestionText: {
+        fontSize: 16,
+        color: colors.textPrimary,
     },
 });
 

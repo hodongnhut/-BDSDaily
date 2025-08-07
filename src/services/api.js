@@ -176,6 +176,7 @@ export const updateProfile = async (profileData, accessToken) => {
 
 export const fetchWards = async (district) => {
     try {
+        console.log(district)
         const accessToken = await AsyncStorage.getItem('accessToken');
         const url = `https://app.bdsdaily.com/api/property/address?address=${encodeURIComponent(district)}`;
         const response = await fetch(url, {
@@ -187,7 +188,10 @@ export const fetchWards = async (district) => {
         });
         const data = await response.json();
         if (response.ok && data.status) {
-            return data.data;
+            return {
+                wards: data.data.wards,
+                streets: data.data.streets,
+            };
         } else {
             throw new Error(data.msg || 'Lấy danh sách phường/xã thất bại!');
         }
