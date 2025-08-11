@@ -241,11 +241,13 @@ export const getProperty = async (propertyId) => {
                 property: data.data.property,
                 advantages: data.data.advantages,
                 disadvantages: data.data.disadvantages,
+                selectAdvantages: data.data.selectAdvantages,
+                selectDisadvantages: data.data.selectDisadvantages,
                 images: data.data.images,
                 contacts: data.data.contacts,
             };
         } else {
-            throw new Error(data.msg || 'Lấy Chi Tiết BĐS Thành Công!');
+            throw new Error(data.msg || 'Lấy Chi Tiết BĐS thất bại!');
         }
     } catch (error) {
         const errorMessage = error.message || 'Đã xảy ra lỗi khi tạo bất động sản.';
@@ -254,10 +256,11 @@ export const getProperty = async (propertyId) => {
 };
 
 
-export const updateProperty = async (propertyData) => {
+export const updateProperty = async (propertyId, propertyData) => {
     try {
+        const url = `https://app.bdsdaily.com/api/property/update?propertyId=${propertyId}`;
         const accessToken = await AsyncStorage.getItem('accessToken');
-        const response = await fetch('https://app.bdsdaily.com/api/property/update', {
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -277,4 +280,40 @@ export const updateProperty = async (propertyData) => {
     }
 };
 
+export const uploadImage = async (propertyId, images, type) => {
+    try {
+        const accessToken = await AsyncStorage.getItem('accessToken');
+        const formData = new FormData();
+        console.log(images);
+        images.forEach((image, index) => {
+            formData.append('files[]', {
+                uri: image.uri,
+                name: image.name || `image_${Date.now()}_${index}.jpg`,
+                type: image.type || 'image/jpeg',
+            });
+        });
+        console.log(type);
+        formData.append('type', type);
+        formData.append('property_id', propertyId);
+
+        const response = await fetch('https://app.bdsdaily.com/api/property/upload-image', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: formData,
+        });
+
+        const data = await response.json();
+        console.log(data)
+        if (response.ok && data.success) {
+            return data.images;
+        } else {
+            throw new Error(data.msg || 'Tải lên hình ảnh thất bại!');
+        }
+    } catch (error) {
+        const errorMessage = error.message || 'Đã xảy ra lỗi khi tải lên hình ảnh.';
+        throw new Error(errorMessage);
+    }
+};
 

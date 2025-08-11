@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useContext } from 'react';
 import {
     View,
     Text,
@@ -11,12 +11,20 @@ import {
     FlatList,
     Image,
     Alert,
+    ActivityIndicator,
+    RefreshControl,
+    Switch
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../styles/colors';
+import NotificationContext from '../contexts/NotificationContext';
 import AddContactForm from './AddContactForm';
-import { fetchWards, updateProperty, getProperty } from '../services/api';
+// import HasRentalContract from './HasRentalContract';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { Platform } from 'react-native';
+import { fetchWards, updateProperty, getProperty, uploadImage } from '../services/api';
 import {
     transactionTypes,
     propertyTypes,
@@ -26,9 +34,8 @@ import {
     productTypeOptions,
     directionOptions,
     landTypeOptions,
-    priceUnitOptions,
-    districtOptions,
-    prosConsOptions
+    prosConsOptions,
+    formatPriceUnit
 } from '../data/fromPreparing';
 
 const Section = ({ title, children }) => (
@@ -49,7 +56,7 @@ const InputGroup = ({ label, children, isRequired }) => (
 );
 
 const ListingFormAdvanced = ({ route, navigation }) => {
-    const { id } = route.params;
+    const { propertyId } = route.params || {};
     const [selectedTab, setSelectedTab] = useState('Dữ Liệu Nhà Đất');
     const [isContactModalVisible, setIsContactModalVisible] = useState(false);
     const [wards, setWards] = useState([]);
@@ -57,6 +64,14 @@ const ListingFormAdvanced = ({ route, navigation }) => {
     const [filteredStreets, setFilteredStreets] = useState([]);
     const [locationCache, setLocationCache] = useState({});
     const [isLoading, setIsLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [isFetchingProperty, setIsFetchingProperty] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isPickingImage, setIsPickingImage] = useState(false);
+    const { showNotification } = useContext(NotificationContext);
+    const [viewPrice, setViewPrice] = useState(false);
+    // const [isHasRentalContract, setIsHasRentalContract] = useState(false);
+
 
     const [formData, setFormData] = useState({
         city: 'Hồ Chí Minh',
@@ -102,15 +117,97 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         notes: '',
         selectedPros: new Set(),
         selectedCons: new Set(),
+        final_price: '',
+        locationType: null,
     });
 
     const [redBookImages, setRedBookImages] = useState([]);
     const [additionalImages, setAdditionalImages] = useState([]);
+    const [prosOptions, setProsOptions] = useState(prosConsOptions.pros);
+    const [consOptions, setConsOptions] = useState(prosConsOptions.cons);
+
+    const fetchPropertyData = useCallback(async () => {
+        if (propertyId) {
+            try {
+                setIsLoading(true);
+                const response = await getProperty(propertyId);
+                const property = response.property;
+                const contacts = response.contacts[0] || {};
+                setViewPrice(formatPriceUnit(parseInt(property.price)));
+                setFormData({
+                    city: property.city || 'Hồ Chí Minh',
+                    district: property.district_county || null,
+                    ward: property.ward_commune || null,
+                    street: property.street_name || '',
+                    houseNumber: property.house_number || '',
+                    lotNumber: property.plot_number || '',
+                    sheetNumber: property.sheet_number || '',
+                    blockNumber: property.lot_number || '',
+                    areaDescription: property.region || '',
+                    transactionType: property.listing_types_id === 1 ? 'Bán' : 'Cho thuê',
+                    propertyType: property.property_type_id || null,
+                    listingType: null,
+                    price: property.price ? (parseInt(property.price)).toString() : '',
+                    priceUnit: property.price_unit || 'Tỷ',
+                    priceRate: '',
+                    landArea: property.area_total || '',
+                    landWidth: property.area_width || '',
+                    landLength: property.area_length || '',
+                    backWidth: property.area_back_side || '',
+                    plannedArea: property.planned_construction_area || '',
+                    plannedWidth: property.planned_width || '',
+                    plannedLength: property.planned_length || '',
+                    plannedBackWidth: property.planned_back_side || '',
+                    beds: property.num_bedrooms || '',
+                    baths: property.num_toilets || '',
+                    productType: property.product_type || null,
+                    direction: property.direction_id || null,
+                    landType: property.land_type_id || null,
+                    streetWidth: property.wide_road || '',
+                    usedArea: property.usable_area || '',
+                    floors: property.num_floors || '',
+                    basements: property.num_basements || '',
+                    status: property.transaction_status_id?.toString() || null,
+                    assetType: property.asset_type_id?.toString() || null,
+                    hasTaxContract: !!property.has_vat_invoice,
+                    hasLeaseContract: !!property.has_rental_contract,
+                    isUnderNegotiation: !!property.has_deposit,
+                    contactName: contacts.contact_name || '',
+                    contactPhone: contacts.phone_number || '',
+                    hasLuckyMoney: false,
+                    notes: property.description || '',
+                    selectedPros: new Set(response.selectAdvantages.map(id => response.advantages.find(a => a.advantage_id === id)?.name || '')),
+                    selectedCons: new Set(response.selectDisadvantages.map(id => response.disadvantages.find(d => d.disadvantage_id === id)?.disadvantage_name || '')),
+                    final_price: property.final_price || '',
+                    locationType: property.location_type_id?.toString() || null,
+                });
+                setProsOptions(response.advantages.map(a => ({ id: a.advantage_id, name: a.name })));
+                setConsOptions(response.disadvantages.map(d => ({ id: d.disadvantage_id, name: d.disadvantage_name })));
+                setAdditionalImages(response.images.map(img => ({
+                    uri: img.image_path,
+                    name: `image_${img.image_id}.jpg`,
+                })));
+                setRedBookImages([]);
+            } catch (error) {
+                Alert.alert('Error', error.message || 'Failed to load property data.');
+            } finally {
+                setIsLoading(false);
+                setRefreshing(false);
+            }
+        } else {
+            setIsLoading(false);
+            setRefreshing(false);
+        }
+    }, [propertyId, handleDistrictChange]);
 
     useEffect(() => {
-        const property_id = id;
-        console.log(property_id);
-    }, [navigation]);
+        fetchPropertyData();
+    }, [fetchPropertyData]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchPropertyData();
+    }, [fetchPropertyData]);
 
     const handleDistrictChange = useCallback(async (districtValue) => {
         setFormData((prev) => ({ ...prev, district: districtValue, ward: null, street: '' }));
@@ -172,15 +269,21 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
+    const handleChangePrice = (name, value) => {
+        const numericValue = Number(value.replace(/[^0-9]/g, ''));
+        setViewPrice(formatPriceUnit(numericValue));
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
+    };
+
+
     const handleToggleProsCons = (type, value) => {
         setFormData((prev) => {
-            const newSet = new Set(prev[type]);
-            if (newSet.has(value)) {
-                newSet.delete(value);
-            } else {
-                newSet.add(value);
-            }
-            return { ...prev, [type]: newSet };
+            const updatedSet = new Set(prev[type]);
+            updatedSet.has(value) ? updatedSet.delete(value) : updatedSet.add(value);
+            return { ...prev, [type]: updatedSet };
         });
     };
 
@@ -201,58 +304,66 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         }
 
         try {
-            setIsLoading(true);
+            setIsSubmitting(true);
+            const advantagesIds = Array.from(formData.selectedPros).map(name => prosOptions.find(opt => opt.name === name)?.id).filter(id => id !== undefined);
+            const disadvantagesIds = Array.from(formData.selectedCons).map(name => consOptions.find(opt => opt.name === name)?.id).filter(id => id !== undefined);
+
             const propertyData = {
                 listing_types_id: formData.transactionType === 'Bán' ? 1 : 2,
                 property_type_id: parseInt(formData.propertyType, 10),
-                status: parseInt(formData.status, 10),
-                asset_type: parseInt(formData.assetType, 10),
-                provinces: formData.city,
-                districts: formData.district,
-                wards: formData.ward,
-                streets: formData.street,
+                transaction_status_id: parseInt(formData.status, 10),
+                asset_type_id: parseInt(formData.assetType, 10),
+                location_type_id: formData.locationType ? parseInt(formData.locationType, 10) : null,
+                city: formData.city,
+                district_county: formData.district,
+                ward_commune: formData.ward,
+                street_name: formData.street,
                 house_number: formData.houseNumber,
                 plot_number: formData.lotNumber,
                 sheet_number: formData.sheetNumber,
                 lot_number: formData.blockNumber,
                 region: formData.areaDescription,
-                price: formData.price,
+                price: formData.price ? formData.price : '',
+                final_price: formData.final_price || null,
                 price_unit: formData.priceUnit,
                 price_rate: formData.priceRate,
-                land_area: formData.landArea,
-                land_width: formData.landWidth,
-                land_length: formData.landLength,
-                back_width: formData.backWidth,
-                planned_area: formData.plannedArea,
+                area_total: formData.landArea,
+                area_width: formData.landWidth,
+                area_length: formData.landLength,
+                area_back_side: formData.backWidth,
+                planned_construction_area: formData.plannedArea,
                 planned_width: formData.plannedWidth,
                 planned_length: formData.plannedLength,
-                planned_back_width: formData.plannedBackWidth,
-                beds: formData.beds,
-                baths: formData.baths,
+                planned_back_side: formData.plannedBackWidth,
+                num_bedrooms: formData.beds,
+                num_toilets: formData.baths,
                 product_type: formData.productType,
-                direction: formData.direction,
-                land_type: formData.landType,
-                street_width: formData.streetWidth,
-                used_area: formData.usedArea,
-                floors: formData.floors,
-                basements: formData.basements,
-                has_tax_contract: formData.hasTaxContract,
-                has_lease_contract: formData.hasLeaseContract,
-                is_under_negotiation: formData.isUnderNegotiation,
+                direction_id: formData.direction,
+                land_type_id: formData.landType,
+                wide_road: formData.streetWidth,
+                usable_area: formData.usedArea,
+                num_floors: formData.floors,
+                num_basements: formData.basements,
+                has_vat_invoice: formData.hasTaxContract ? 1 : 0,
+                has_rental_contract: formData.hasLeaseContract ? 1 : 0,
+                has_deposit: formData.isUnderNegotiation ? 1 : 0,
                 contact_name: formData.contactName,
-                contact_phone: formData.contactPhone,
-                has_lucky_money: formData.hasLuckyMoney,
-                notes: formData.notes,
-                pros: Array.from(formData.selectedPros),
-                cons: Array.from(formData.selectedCons),
+                phone_number: formData.contactPhone,
+                has_lucky_money: formData.hasLuckyMoney ? 1 : 0,
+                description: formData.notes,
+                advantages: advantagesIds,
+                disadvantages: disadvantagesIds,
             };
-            await createProperty(propertyData);
-            Alert.alert('Thành công', 'Đã tạo bất động sản thành công.');
+
+            if (propertyId) {
+                await updateProperty(propertyId, propertyData);
+                showNotification('Đã cập nhật bất động sản thành công!', 'info');
+            }
             navigation.goBack();
         } catch (error) {
-            Alert.alert('Lỗi', error.message || 'Không thể tạo bất động sản.');
+            Alert.alert('Lỗi', error.message || 'Không thể lưu bất động sản.');
         } finally {
-            setIsLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -269,13 +380,100 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         setIsContactModalVisible(false);
     };
 
-    const handleImagePicker = (imageType) => {
-        const dummyImageUri = 'https://via.placeholder.com/150';
-        const newImage = { uri: dummyImageUri, name: `ảnh_${Math.random().toString(36).substring(7)}.jpg` };
-        if (imageType === 'redBook') {
-            setRedBookImages((prev) => [...prev, newImage]);
-        } else {
-            setAdditionalImages((prev) => [...prev, newImage]);
+    const checkPermissions = async () => {
+        const permission = Platform.OS === 'ios' ? PERMISSIONS.IOS.PHOTO_LIBRARY : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
+        const result = await check(permission);
+        if (result !== RESULTS.GRANTED) {
+            const requestResult = await request(permission);
+            if (requestResult !== RESULTS.GRANTED) {
+                Alert.alert('Quyền bị từ chối', 'Vui lòng cấp quyền truy cập thư viện ảnh trong cài đặt.');
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleImagePicker = async (imageType) => {
+        const hasPermission = await checkPermissions();
+        if (!hasPermission) return;
+        const maxImages = 10;
+        const currentImages = imageType === 'redBook' ? redBookImages : additionalImages;
+        if (currentImages.length >= maxImages) {
+            Alert.alert('Giới hạn', `Bạn chỉ có thể tải lên tối đa ${maxImages} hình ảnh ${imageType === 'redBook' ? 'sổ hồng' : 'bổ sung'}.`);
+            return;
+        }
+
+        const options = {
+            mediaType: 'photo',
+            quality: 1,
+            maxWidth: 1024,
+            maxHeight: 1024,
+            includeBase64: false,
+            selectionLimit: 0,
+        };
+
+        try {
+            setIsPickingImage(true);
+            const result = await launchImageLibrary(options);
+            if (result.didCancel) {
+                console.log('User cancelled image picker');
+                return;
+            }
+            if (result.errorCode) {
+                Alert.alert('Lỗi', `Không thể chọn hình ảnh: ${result.errorMessage}`);
+                return;
+            }
+
+            const images = result.assets.map((image) => ({
+                uri: image.uri,
+                name: image.fileName || `image_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`,
+                type: image.type || 'image/jpeg',
+            }));
+
+            const currentCount = currentImages.length;
+            const allowedImages = images.slice(0, maxImages - currentCount);
+
+            if (allowedImages.length < images.length) {
+                Alert.alert('Cảnh báo', `Chỉ có thể thêm ${allowedImages.length} hình ảnh do giới hạn tối đa ${maxImages}.`);
+            }
+
+            if (propertyId) {
+                try {
+                    const uploadType = imageType === 'redBook' ? 'legal' : 'other';
+                    const uploadedImages = await uploadImage(propertyId, allowedImages, uploadType);
+                    const formattedImages = uploadedImages.map((img, index) => ({
+                        uri: img.image_path || allowedImages[index].uri,
+                        name: allowedImages[index].name,
+                        type: allowedImages[index].type,
+                    }));
+
+                    if (imageType === 'redBook') {
+                        setRedBookImages((prev) => [...prev, ...formattedImages]);
+                    } else {
+                        setAdditionalImages((prev) => [...prev, ...formattedImages]);
+                    }
+                    Alert.alert('Thành công', `Đã tải lên ${allowedImages.length} hình ảnh.`);
+                } catch (error) {
+                    Alert.alert('Lỗi', error.message || 'Không thể tải lên hình ảnh.');
+                    console.error('Image upload error:', error);
+                    if (imageType === 'redBook') {
+                        setRedBookImages((prev) => [...prev, ...allowedImages]);
+                    } else {
+                        setAdditionalImages((prev) => [...prev, ...allowedImages]);
+                    }
+                }
+            } else {
+                if (imageType === 'redBook') {
+                    setRedBookImages((prev) => [...prev, ...allowedImages]);
+                } else {
+                    setAdditionalImages((prev) => [...prev, ...allowedImages]);
+                }
+            }
+        } catch (error) {
+            Alert.alert('Lỗi', 'Đã xảy ra lỗi khi chọn hình ảnh.');
+            console.error('Image picker error:', error);
+        } finally {
+            setIsPickingImage(false);
         }
     };
 
@@ -287,18 +485,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         }
     };
 
-    // Render street suggestion item
-    const renderStreetSuggestion = ({ item }) => (
-        <TouchableOpacity
-            style={styles.suggestionItem}
-            onPress={() => handleStreetSelect(item.Name)}
-            accessibilityLabel={`Chọn đường ${item.Name}`}
-        >
-            <Text style={styles.suggestionText}>{item.Name}</Text>
-        </TouchableOpacity>
-    );
-
-    // Component hiển thị nội dung của tab "Dữ Liệu Nhà Đất"
     const renderDataForm = () => (
         <>
             <Section title="Thông tin cơ bản">
@@ -312,24 +498,33 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                                 enabled={!isLoading}
                             >
                                 {locationTypeOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                    <Picker.Item
+                                        key={item.value || 'placeholder'}
+                                        label={item.label}
+                                        value={item.value}
+                                    />
                                 ))}
                             </Picker>
                         </View>
-
                     </InputGroup>
-
                 </View>
                 <View style={styles.fieldRow}>
                     <InputGroup label="Giá" isRequired>
                         <TextInput
                             style={styles.input}
                             value={formData.price}
-                            onChangeText={(text) => handleChange('price', text)}
+                            onChangeText={(text) => handleChangePrice('price', text)}
+                            keyboardType="numeric"
                             accessibilityLabel="Nhập giá"
                             editable={!isLoading}
                         />
                     </InputGroup>
+
+                </View>
+                <View style={styles.fieldRow}>
+                    <View>
+                        <Text>{viewPrice}</Text>
+                    </View>
                 </View>
                 <View style={styles.fieldRow}>
                     <InputGroup label="Giá chốt">
@@ -342,9 +537,18 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                         />
                     </InputGroup>
                 </View>
-                <View style={styles.fieldRow}>
+                {/* <View style={styles.fieldRow}>
+                    <View style={styles.switchRow}>
 
-                </View>
+                        <Switch
+                            trackColor={{ false: colors.border, true: colors.accent }}
+                            thumbColor={isHasRentalContract ? colors.cardBackground : colors.cardBackground}
+                            onValueChange={isHasRentalContract}
+                            value={isHasRentalContract}
+                        />
+                        <Text style={styles.switchLabel}>Hợp đồng thuê</Text>
+                    </View>
+                </View> */}
             </Section>
             <Section title="Thông tin giao dịch">
                 <View style={styles.fieldRow}>
@@ -364,26 +568,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                             ))}
                         </View>
                     </InputGroup>
-                    <InputGroup label="Loại Sản Phẩm" isRequired>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={formData.propertyType}
-                                onValueChange={(itemValue) => handleChange('propertyType', itemValue)}
-                                style={styles.picker}
-                                enabled={!isLoading}
-                            >
-                                <Picker.Item label="Chọn Loại BĐS" value={null} />
-                                {propertyTypes.map((type) => (
-                                    <Picker.Item key={type.value} label={type.label} value={type.value} />
-                                ))}
-                            </Picker>
-                        </View>
-                    </InputGroup>
-
-                </View>
-
-
-                <View style={[styles.fieldRow, { marginTop: 10 }]}>
                     <InputGroup label="Loại Tài Sản" isRequired>
                         <View style={styles.pickerContainer}>
                             <Picker
@@ -393,22 +577,26 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                                 enabled={!isLoading}
                             >
                                 {assetTypeOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                    <Picker.Item
+                                        key={item.value || 'placeholder'}
+                                        label={item.label}
+                                        value={item.value}
+                                    />
                                 ))}
                             </Picker>
                         </View>
                     </InputGroup>
-
                 </View>
-
                 <View style={styles.fullWidthField}>
                     <InputGroup label="Trạng thái giao dịch" isRequired>
                         <View style={styles.checkboxGroup}>
                             {statusOptions.map((option) => (
-                                <View key={option.value} style={styles.checkboxItem}>
+                                <View key={option.value} style={styles.statusCheckboxItem}>
                                     <TouchableOpacity
                                         onPress={() => handleChange('status', option.value)}
-                                        disabled={isLoading}
+                                        disabled={isFetchingProperty || isSubmitting}
+                                        accessibilityRole="radio"
+                                        accessibilityLabel={`Chọn trạng thái ${option.label}`}
                                     >
                                         <Icon
                                             name={formData.status === option.value ? 'radiobox-marked' : 'radiobox-blank'}
@@ -419,11 +607,13 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                                     <Text style={styles.checkboxText}>{option.label}</Text>
                                 </View>
                             ))}
+                            {statusOptions.length % 2 !== 0 && (
+                                <View style={[styles.statusCheckboxItem, styles.placeholderItem]} />
+                            )}
                         </View>
                     </InputGroup>
                 </View>
             </Section>
-
             <Section title="Địa Chỉ BĐS">
                 <View style={styles.fieldRow}>
                     <InputGroup label="Tỉnh Thành" isRequired>
@@ -433,33 +623,28 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                     <InputGroup label="Quận Huyện" isRequired>
                         <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={formData.district}
-                                onValueChange={handleDistrictChange}
-                                style={styles.picker}
-                                enabled={!isLoading}
-                            >
-                                {districtOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
-                                ))}
-                            </Picker>
+                            <TextInput
+                                style={styles.input}
+                                value={formData.district}
+                                placeholder="Nhập Quận huyện"
+                                placeholderTextColor="#888"
+                                accessibilityLabel="Nhập Quận huyện"
+                                editable={!isLoading}
+                            />
                         </View>
                     </InputGroup>
                 </View>
                 <View style={styles.fieldRow}>
                     <InputGroup label="Phường / Xã" isRequired>
                         <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={formData.ward}
-                                onValueChange={(itemValue) => handleChange('ward', itemValue)}
-                                style={styles.picker}
-                                enabled={wards.length > 0 && !isLoading}
-                            >
-                                <Picker.Item label="Chọn Phường / Xã" value={null} />
-                                {wards.map((item) => (
-                                    <Picker.Item key={item.value} label={item.Name} value={item.Name} />
-                                ))}
-                            </Picker>
+                            <TextInput
+                                style={styles.input}
+                                value={formData.ward}
+                                placeholder="Nhập Tên Phường"
+                                placeholderTextColor="#888"
+                                accessibilityLabel="Nhập Tên Phường"
+                                editable={!isLoading}
+                            />
                         </View>
                     </InputGroup>
                 </View>
@@ -475,17 +660,25 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                             editable={!isLoading}
                         />
                         {filteredStreets.length > 0 && formData.street.trim() !== '' && (
-                            <FlatList
+                            <ScrollView
                                 style={styles.suggestionList}
-                                data={filteredStreets}
-                                renderItem={renderStreetSuggestion}
-                                keyExtractor={(item) => item.id}
+                                nestedScrollEnabled={true}
                                 keyboardShouldPersistTaps="handled"
-                            />
+                            >
+                                {filteredStreets.map((item) => (
+                                    <TouchableOpacity
+                                        key={item?.id ? item.id.toString() : `street-${index}`}
+                                        style={styles.suggestionItem}
+                                        onPress={() => handleStreetSelect(item.Name)}
+                                        accessibilityLabel={`Chọn đường ${item.Name}`}
+                                    >
+                                        <Text style={styles.suggestionText}>{item.Name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
                         )}
                     </InputGroup>
                 </View>
-
                 <View style={styles.fieldRow}>
                     <InputGroup label="Số Nhà" isRequired>
                         <TextInput
@@ -506,7 +699,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                         />
                     </InputGroup>
                 </View>
-
                 <View style={styles.fieldRow}>
                     <InputGroup label="Số Tờ">
                         <TextInput
@@ -527,7 +719,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                         />
                     </InputGroup>
                 </View>
-
                 <View style={styles.fullWidthField}>
                     <InputGroup label="Khu Vực">
                         <TextInput
@@ -542,10 +733,9 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                 </View>
             </Section>
-
             <Section title="Diện Tích Đất">
                 <View style={styles.fieldRow}>
-                    <InputGroup label="Chiều rộng">
+                    <InputGroup label="Ngang" isRequired>
                         <TextInput
                             style={styles.input}
                             keyboardType="numeric"
@@ -554,7 +744,7 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                             editable={!isLoading}
                         />
                     </InputGroup>
-                    <InputGroup label="Chiều dài">
+                    <InputGroup label="Dài" isRequired>
                         <TextInput
                             style={styles.input}
                             keyboardType="numeric"
@@ -574,7 +764,7 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                 </View>
                 <View style={styles.fullWidthField}>
-                    <InputGroup label="DT Công nhận">
+                    <InputGroup label="DT Công nhận" isRequired>
                         <TextInput
                             style={styles.input}
                             keyboardType="numeric"
@@ -585,7 +775,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                 </View>
             </Section>
-
             <Section title="Diện Tích Quy Hoạch">
                 <View style={styles.fieldRow}>
                     <InputGroup label="Chiều rộng">
@@ -628,23 +817,29 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                 </View>
             </Section>
-
             <Section title="Thông tin khác">
                 <View style={styles.fieldRow}>
-                    <InputGroup label="Loại sản phẩm">
+                    <InputGroup label="Loại sản phẩm" isRequired>
                         <View style={styles.pickerContainer}>
                             <Picker
-                                selectedValue={formData.productType}
-                                onValueChange={(itemValue) => handleChange('productType', itemValue)}
+                                selectedValue={formData.propertyType}
+                                onValueChange={(itemValue) => handleChange('propertyType', itemValue)}
                                 style={styles.picker}
                                 enabled={!isLoading}
                             >
                                 {productTypeOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                    <Picker.Item
+                                        key={item.value || 'placeholder'}
+                                        label={item.label}
+                                        value={item.value}
+                                    />
                                 ))}
                             </Picker>
                         </View>
                     </InputGroup>
+                </View>
+                <View style={styles.fieldRow}>
+
                     <InputGroup label="Hướng">
                         <View style={styles.pickerContainer}>
                             <Picker
@@ -654,7 +849,11 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                                 enabled={!isLoading}
                             >
                                 {directionOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                    <Picker.Item
+                                        key={item.value || 'placeholder'}
+                                        label={item.label}
+                                        value={item.value}
+                                    />
                                 ))}
                             </Picker>
                         </View>
@@ -668,13 +867,16 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                                 enabled={!isLoading}
                             >
                                 {landTypeOptions.map((item) => (
-                                    <Picker.Item key={item.value || 'placeholder'} label={item.label} value={item.value} />
+                                    <Picker.Item
+                                        key={item.value || 'placeholder'}
+                                        label={item.label}
+                                        value={item.value}
+                                    />
                                 ))}
                             </Picker>
                         </View>
                     </InputGroup>
                 </View>
-
                 <View style={styles.fieldRow}>
                     <InputGroup label="Đường rộng">
                         <TextInput
@@ -695,7 +897,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                         />
                     </InputGroup>
                 </View>
-
                 <View style={styles.fieldRow}>
                     <InputGroup label="Số Tầng">
                         <TextInput
@@ -735,16 +936,17 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </InputGroup>
                 </View>
             </Section>
-
             <Section title="Ưu điểm & Nhược điểm">
                 <View style={styles.prosConsContainer}>
                     <View style={styles.prosConsColumn}>
                         <Text style={styles.prosConsTitle}>Ưu điểm</Text>
-                        {prosConsOptions.pros.map((option) => (
-                            <View key={option.id} style={styles.checkboxItem}>
+                        {prosOptions.map((option) => (
+                            <View key={option.id} style={styles.prosConsCheckboxItem}>
                                 <TouchableOpacity
                                     onPress={() => handleToggleProsCons('selectedPros', option.name)}
-                                    disabled={isLoading}
+                                    disabled={isFetchingProperty || isSubmitting}
+                                    accessibilityRole="checkbox"
+                                    accessibilityLabel={`Chọn ưu điểm ${option.name}`}
                                 >
                                     <Icon
                                         name={formData.selectedPros.has(option.name) ? 'checkbox-marked' : 'checkbox-blank-outline'}
@@ -758,25 +960,26 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </View>
                     <View style={styles.prosConsColumn}>
                         <Text style={styles.prosConsTitle}>Nhược điểm</Text>
-                        {prosConsOptions.cons.map((option) => (
-                            <View key={option.id} style={styles.checkboxItem}>
+                        {consOptions.map((option) => (
+                            <View key={option.id} style={styles.prosConsCheckboxItem}>
                                 <TouchableOpacity
-                                    onPress={() => handleToggleProsCons('selectedCons', option.disadvantage_name)}
-                                    disabled={isLoading}
+                                    onPress={() => handleToggleProsCons('selectedCons', option.name)}
+                                    disabled={isFetchingProperty || isSubmitting}
+                                    accessibilityRole="checkbox"
+                                    accessibilityLabel={`Chọn nhược điểm ${option.name}`}
                                 >
                                     <Icon
-                                        name={formData.selectedCons.has(option.disadvantage_name) ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                                        name={formData.selectedCons.has(option.name) ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                         size={20}
-                                        color={formData.selectedCons.has(option.disadvantage_name) ? colors.secondary : '#888'}
+                                        color={formData.selectedCons.has(option.name) ? colors.secondary : '#888'}
                                     />
                                 </TouchableOpacity>
-                                <Text style={styles.checkboxText}>{option.disadvantage_name}</Text>
+                                <Text style={styles.checkboxText}>{option.name}</Text>
                             </View>
                         ))}
                     </View>
                 </View>
             </Section>
-
             <Section title="Ghi chú">
                 <TextInput
                     style={[styles.input, styles.textArea]}
@@ -790,11 +993,9 @@ const ListingFormAdvanced = ({ route, navigation }) => {
         </>
     );
 
-    // Component hiển thị nội dung của tab "Sổ Hồng & Hình Ảnh"
     const renderImagesForm = () => (
         <View style={styles.imagesTabContent}>
             <Text style={styles.imageSectionTitle}>Hình ảnh đã tải lên</Text>
-
             <View style={styles.imageUploadRow}>
                 <View style={styles.imageUploadBox}>
                     <Text style={styles.uploadBoxTitle}>SỔ HỒNG | GIẤY TỜ PHÁP LÝ</Text>
@@ -804,7 +1005,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                         <Text style={styles.uploadBoxSubText}>File: pdf, jpg, png, jpeg, webp, heic!</Text>
                     </TouchableOpacity>
                 </View>
-
                 <View style={styles.imageUploadBox}>
                     <Text style={styles.uploadBoxTitle}>HÌNH ẢNH BỔ SUNG</Text>
                     <TouchableOpacity style={styles.uploadBoxButton} onPress={() => handleImagePicker('additional')} disabled={isLoading}>
@@ -814,10 +1014,9 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </TouchableOpacity>
                 </View>
             </View>
-
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
                 {redBookImages.map((image, index) => (
-                    <View key={index} style={styles.imagePreviewContainer}>
+                    <View key={`redBook_${index}`} style={styles.imagePreviewContainer}>
                         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
                         <TouchableOpacity
                             onPress={() => handleRemoveImage('redBook', index)}
@@ -829,10 +1028,9 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </View>
                 ))}
             </ScrollView>
-
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
                 {additionalImages.map((image, index) => (
-                    <View key={index} style={styles.imagePreviewContainer}>
+                    <View key={`additional_${index}`} style={styles.imagePreviewContainer}>
                         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
                         <TouchableOpacity
                             onPress={() => handleRemoveImage('additional', index)}
@@ -855,7 +1053,6 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     <Icon name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
             </View>
-
             <View style={styles.tabsContainer}>
                 <TouchableOpacity
                     style={[styles.tabButton, selectedTab === 'Dữ Liệu Nhà Đất' && styles.tabButtonSelected]}
@@ -876,11 +1073,27 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     </Text>
                 </TouchableOpacity>
             </View>
-
-            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-                {selectedTab === 'Dữ Liệu Nhà Đất' ? renderDataForm() : renderImagesForm()}
-            </ScrollView>
-
+            {isLoading && !refreshing ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={colors.secondary} />
+                    <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+                </View>
+            ) : (
+                <ScrollView
+                    style={styles.formContainer}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colors.secondary]}
+                            tintColor={colors.secondary}
+                        />
+                    }
+                >
+                    {selectedTab === 'Dữ Liệu Nhà Đất' ? renderDataForm() : renderImagesForm()}
+                </ScrollView>
+            )}
             <View style={styles.buttonContainer}>
                 <TouchableOpacity
                     style={[styles.cancelButton, isLoading && styles.buttonDisabled]}
@@ -897,12 +1110,16 @@ const ListingFormAdvanced = ({ route, navigation }) => {
                     <Text style={styles.buttonText}>{isLoading ? 'ĐANG XỬ LÝ...' : 'LƯU'}</Text>
                 </TouchableOpacity>
             </View>
-
             <AddContactForm
                 visible={isContactModalVisible}
                 onClose={() => setIsContactModalVisible(false)}
                 onSave={handleSaveContact}
             />
+            {/* <HasRentalContract
+                visible={isContactModalVisible}
+                onClose={() => setIsContactModalVisible(false)}
+                onSave={handleSaveContact}
+            /> */}
             <TouchableOpacity
                 style={[styles.fab, isLoading && styles.buttonDisabled]}
                 onPress={() => setIsContactModalVisible(true)}
@@ -967,6 +1184,16 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 10,
     },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: colors.textPrimary,
+    },
     sectionContainer: {
         backgroundColor: '#FFF',
         borderRadius: 8,
@@ -991,6 +1218,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 10,
+    },
+    switchRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+        paddingVertical: 5,
+    },
+    switchLabel: {
+        fontSize: 15,
+        color: colors.textPrimary,
+        fontWeight: '500',
     },
     inputGroup: {
         flex: 1,
@@ -1074,12 +1313,17 @@ const styles = StyleSheet.create({
     checkboxGroup: {
         flexDirection: 'row',
         flexWrap: 'wrap',
+        justifyContent: 'space-between'
+    },
+    placeholderItem: {
+        width: '50%',
     },
     checkboxItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginRight: 20,
-        marginBottom: 5,
+        width: '50%',
+        paddingVertical: 5,
+        paddingHorizontal: 10,
     },
     checkboxText: {
         marginLeft: 5,
@@ -1091,12 +1335,42 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         flexWrap: 'wrap',
     },
+    prosConsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    statusCheckboxItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '50%',
+        paddingVertical: 5,
+        paddingHorizontal: 10,
+        backgroundColor: '#f0f0f0',
+    },
+    prosConsCheckboxItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        paddingVertical: 5,
+        paddingHorizontal: 10,
+        backgroundColor: '#e0e0e0',
+    },
     prosConsColumn: {
         width: '48%',
     },
     prosConsTitle: {
         fontWeight: 'bold',
+        fontSize: 14,
+        color: colors.textPrimary,
         marginBottom: 8,
+    },
+    prosConsCheckboxItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        paddingVertical: 5,
+        paddingHorizontal: 10,
     },
     buttonContainer: {
         flexDirection: 'row',

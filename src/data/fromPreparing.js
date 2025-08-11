@@ -82,28 +82,59 @@ export const locationTypeOptions = [
 ];
 
 export const productTypeOptions = [
-    { label: 'Chọn Loại Sản Phẩm', value: null },
-    { label: 'Đất trống', value: 'empty_land' },
-    { label: 'Nhà ở', value: 'house' },
+    { label: 'Chọn loại sản phẩm', value: '' },
+    { label: 'Biệt thự', value: 13 },
+    { label: 'Căn hộ', value: 17 },
+    { label: 'Căn Hộ Dịch Vụ', value: 12 },
+    { label: 'Cao ốc', value: 16 },
+    { label: 'Chưa chọn', value: 30 },
+    { label: 'Condotel', value: 19 },
+    { label: 'Đất', value: 24 },
+    { label: 'Góc 2 mặt tiền', value: 28 },
+    { label: 'Karaoke', value: 25 },
+    { label: 'Khác', value: 27 },
+    { label: 'Khách Sạn', value: 15 },
+    { label: 'Kho xưởng', value: 23 },
+    { label: 'Mặt Bằng', value: 22 },
+    { label: 'Nhà Cấp 4', value: 9 },
+    { label: 'Nhà Hẻm, Ngõ', value: 10 },
+    { label: 'Nhà Nát', value: 11 },
+    { label: 'Nhà phố', value: 8 },
+    { label: 'Nhà Phố & Biệt thự', value: 14 },
+    { label: 'Phòng Trọ', value: 26 },
+    { label: 'ShopHouse', value: 18 },
+    { label: 'Tòa Nhà Văn Phòng', value: 21 },
+    { label: 'Văn Phòng', value: 20 },
 ];
 
 export const directionOptions = [
-    { label: 'Chọn Hướng', value: null },
-    { label: 'Đông', value: 'east' },
-    { label: 'Tây', value: 'west' },
-    { label: 'Nam', value: 'south' },
-    { label: 'Bắc', value: 'north' },
-    { label: 'Đông Bắc', value: 'northeast' },
-    { label: 'Tây Bắc', value: 'northwest' },
-    { label: 'Đông Nam', value: 'southeast' },
-    { label: 'Tây Nam', value: 'southwest' },
+    { label: 'Chọn Hướng', value: '' },
+    { label: 'Bắc', value: 4 },
+    { label: 'Chưa Chọn', value: 13 },
+    { label: 'Đông', value: 1 },
+    { label: 'Đông-Bắc', value: 5 },
+    { label: 'Đông-Nam', value: 8 },
+    { label: 'Nam', value: 3 },
+    { label: 'Tây', value: 2 },
+    { label: 'Tây-Bắc', value: 6 },
+    { label: 'Tây-Nam', value: 7 },
 ];
 
+
 export const landTypeOptions = [
-    { label: 'Chọn Loại Đất', value: null },
-    { label: 'Thổ cư', value: 'residential' },
-    { label: 'Nông nghiệp', value: 'agricultural' },
-    { label: 'Công nghiệp', value: 'industrial' },
+    { label: 'Chọn loại đất', value: '' },
+    { label: 'Chọn Loại Đất', value: 0 },
+    { label: 'Đất thổ cư', value: 1 },
+    { label: 'Đất trồng cây hằng năm', value: 2 },
+    { label: 'Đất trồng cây lâu năm', value: 3 },
+    { label: 'Đất nông nghiệp khác', value: 4 },
+    { label: 'Đất lâm nghiệp', value: 5 },
+    { label: 'Đất sản xuất kinh doanh', value: 6 },
+    { label: 'Đất nuôi trồng thủy sản', value: 7 },
+    { label: 'Đất phi nông nghiệp khác', value: 8 },
+    { label: 'Đất chuyên dụng', value: 9 },
+    { label: 'Đất hỗn hợp', value: 10 },
+    { label: 'Khác', value: 11 },
 ];
 
 export const priceUnitOptions = [
@@ -159,4 +190,27 @@ export const prosConsOptions = {
         { id: 9, disadvantage_name: "Quy Hoạch Lộ Giới Nhiều" },
         { id: 8, disadvantage_name: "Quy Hoạch Treo" }
     ]
+};
+
+export const formatPriceUnit = (number) => {
+    if (typeof number !== 'number' || number <= 0) {
+        return 'Thỏa thuận';
+    }
+
+    const billion = 1_000_000_000;
+    const million = 1_000_000;
+
+    if (number >= billion) {
+        let result = number / billion;
+        let formattedResult = parseFloat(result.toFixed(2));
+        return `${formattedResult} Tỷ`;
+    }
+
+    if (number >= million) {
+        let result = number / million;
+        let formattedResult = Math.round(result); // làm tròn
+        return `${formattedResult} Triệu`;
+    }
+
+    return `${number.toLocaleString('vi-VN')} VNĐ`;
 };

@@ -84,9 +84,9 @@ const LoginPage = () => {
         <Text style={styles.websiteText}>
           <Text
             style={[styles.websiteText, { color: colors.buttonPrimary, textDecorationLine: 'underline' }]}
-            onPress={() => Linking.openURL('https://kinglandgroup.vn')}
+            onPress={() => Linking.openURL('https://bdsdaily.com')}
           >
-            KingLandGroup.Vn
+            BDSDaily.Com
           </Text>
         </Text>
       </View>
