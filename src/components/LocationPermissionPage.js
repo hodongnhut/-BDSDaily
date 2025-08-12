@@ -6,6 +6,7 @@ import Geolocation from 'react-native-geolocation-service';
 import { useNavigation } from '@react-navigation/native';
 import LocationContext from '../contexts/LocationContext';
 import NotificationContext from '../contexts/NotificationContext';
+import AuthContext from '../contexts/AuthContext';
 import { saveLocation } from '../services/api';
 import { colors } from '../styles/colors';
 
@@ -15,6 +16,7 @@ const LocationPermissionPage = () => {
     const navigation = useNavigation();
     const [permissionStatus, setPermissionStatus] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const { currentUser, setIsLoggedIn } = useContext(AuthContext);
 
     useEffect(() => {
         const checkPermission = async () => {
@@ -86,9 +88,11 @@ const LocationPermissionPage = () => {
             setIsLoading(false);
         }
     };
-    const handleSkip = () => {
+    const handleSkip = async () => {
         setLocationGranted(true);
-        navigation.navigate('Main');
+        await AsyncStorage.clear();
+        setIsLoggedIn(false);
+        showNotification('👋 Đã đăng xuất.', 'success');
     };
     return (
         <View style={styles.container}>

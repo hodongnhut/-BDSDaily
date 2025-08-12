@@ -173,6 +173,9 @@ const ListingList = ({ navigation }) => {
         } catch (err) {
             setError(err.message);
             showNotification(err.message, 'error');
+            await AsyncStorage.clear();
+            setIsLoggedIn(false);
+            showNotification('👋 Đã đăng xuất.', 'success');
         } finally {
             setLoading(false);
             setLoadingMore(false);
