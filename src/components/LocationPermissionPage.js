@@ -86,7 +86,10 @@ const LocationPermissionPage = () => {
             setIsLoading(false);
         }
     };
-
+    const handleSkip = () => {
+        setLocationGranted(true);
+        navigation.navigate('Main');
+    };
     return (
         <View style={styles.container}>
             <View style={styles.card}>
@@ -106,6 +109,9 @@ const LocationPermissionPage = () => {
                 {isLoading && (
                     <Text style={styles.loadingText}>Đang xử lý...</Text>
                 )}
+                <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+                    <Text style={styles.skipText}>Bỏ qua</Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -170,6 +176,19 @@ const styles = StyleSheet.create({
         color: colors.textMedium,
         marginTop: 10,
         textAlign: 'center',
+    },
+    loading: {
+        marginTop: 10,
+    },
+    skipButton: {
+        marginTop: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+    },
+    skipText: {
+        color: colors.buttonPrimary,
+        fontSize: 14,
+        textDecorationLine: 'underline',
     },
 });
 

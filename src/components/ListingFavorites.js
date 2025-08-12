@@ -125,28 +125,33 @@ const ListingFavorites = ({ navigation }) => {
         setError(null);
         try {
             const response = await fetchFavorites(accessToken);
-            console.log('API Response:', response); // Debug log
-            const properties = response.data.properties;
+            const properties = response.properties;
 
-            const mappedProperties = properties.map(property => ({
-                id: property.property_id.toString(),
-                type: property.property_type === 'Nhà phố' ? 'Nhà Phố' : property.property_type,
-                title: property.title,
-                listing_type: property.listing,
-                price: `${(parseFloat(property.price) / 1e9).toFixed(1)} Tỷ VNĐ`,
-                area: `${parseFloat(property.area_total).toFixed(2)} m²`,
-                beds: property.beds || null,
-                baths: property.baths || null,
-                location: `${property.district_county}, ${property.city}`,
-                houseNumber: property.street_name,
-                ward: property.ward_commune,
-                detailedArea: property.area_length && property.area_width ? `(${property.area_width}m x ${property.area_length}m)` : null,
-                status: property.transaction_status,
-                image: property.images && property.images.length > 0 ? property.images[0].image_path : DEFAULT_IMAGE,
-                direction: property.direction,
-                images: property.images || [],
-                redBook: property.red_book ? 1 : 0,
-            }));
+            const mappedProperties = properties
+                .filter(property => property && property.property_id && property.title)
+                .map(property => ({
+                    id: property.property_id.toString(),
+                    type: `Loại Sản Phẩm ${property.property_type || 'N/A'}`,
+                    title: `${property.title || 'Untitled'}`,
+                    listing_type: property.listing || 'N/A',
+                    price: property.price ? `${(parseFloat(property.price) / 1e9).toFixed(1)} Tỷ VNĐ` : 'N/A',
+                    area: property.area_total ? `${parseFloat(property.area_total).toFixed(2)} m²` : 'N/A',
+                    beds: property.beds || null,
+                    baths: property.baths || null,
+                    location: property.district_county && property.city ? `${property.district_county}, ${property.city}` : 'N/A',
+                    houseNumber: property.street_name || null,
+                    ward: property.ward_commune || null,
+                    detailedArea: property.area_width && property.area_length ? `(${property.area_width}m x ${property.area_length}m)` : null,
+                    status: property.transaction_status || 'Chưa Cập nhật',
+                    image: property.images?.length > 0 ? property.images[0].image_path : null,
+                    direction: property.direction || null,
+                    images: property.images || [],
+                    redBook: property.red_book ? 1 : 0,
+                    assetType: `Loại Tài Sản ${property.asset_type || 'N/A'}`,
+                    locationType: `Vị Trí ${property.location_type || 'N/A'}`,
+                    phoneType: property.owner_contacts?.length > 0 ? 1 : 0,
+                    contacts: property.owner_contacts || [],
+                }));
             setFavorites(mappedProperties);
             setLoading(false);
         } catch (err) {

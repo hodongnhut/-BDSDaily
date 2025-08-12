@@ -124,14 +124,20 @@ export const removeFavorite = async (listingId, accessToken) => {
 
 export const fetchFavorites = async (accessToken) => {
     try {
-        console.log(accessToken);
         const response = await fetch('https://app.bdsdaily.com/api/property/favorites', {
             method: 'GET',
             headers: {
                 Authorization: `Bearer ${accessToken}`,
             },
         });
-        if (!response.ok) throw new Error('Failed to fetch favorites');
+        const data = await response.json();
+        if (response.ok && data.status) {
+            return {
+                properties: data.data.properties
+            };
+        } else {
+            throw new Error(data.message || 'Failed to fetch favorites');
+        }
         return await response.json();
     } catch (error) {
         throw new Error(error.message);
